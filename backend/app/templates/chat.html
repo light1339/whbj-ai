@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星宇网络 - 智能 HR 助手</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .star-active { color: #f59e0b !important; transform: scale(1.1); }
+        .star-btn { transition: all 0.15s ease-in-out; }
+        .star-btn:hover { transform: scale(1.2); }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex flex-col font-sans">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-200">
+                <span class="text-white font-bold text-lg">HR</span>
+            </div>
+            <div>
+                <h1 class="text-slate-800 font-bold text-base">智能 HR 助手</h1>
+                <p class="text-slate-400 text-xs flex items-center">
+                    <span class="w-2 h-2 bg-emerald-500 rounded-full inline-block mr-1.5 animate-pulse"></span>
+                    豆包大模型 RAG 驱动
+                </p>
+            </div>
+        </div>
+        <span class="text-slate-400 text-xs font-medium bg-slate-100 px-2.5 py-1 rounded-full">内部测试版 v1.0</span>
+    </header>
+
+    <main id="chat-container" class="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar">
+        <div class="flex items-start space-x-3 max-w-[85%]">
+            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 font-semibold text-xs">🤖</div>
+            <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed">
+                您好！我是您的智能 HR 助手。请问有什么我可以帮您的吗？
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white border-t border-slate-200 p-4 shadow-md">
+        <div class="max-w-4xl mx-auto flex items-center space-x-3">
+            <input type="text" id="user-input" placeholder="试着问问：陪产假有多少天？" class="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"/>
+            <button id="send-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-3 rounded-xl text-sm transition-all shadow-md shadow-blue-100 cursor-pointer disabled:bg-slate-300 flex items-center space-x-1">
+                <span>发送</span>
+            </button>
+        </div>
+    </footer>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+
+        // 本地临时存储用户最后一次提出的query，用于跟反馈打分绑定
+        let lastUserQuery = "";
+
+        function scrollToBottom() {
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        }
+
+        function appendMessage(role, text) {
+            const msgRow = document.createElement('div');
+            const msgId = 'msg-' + Date.now();
+            
+            if (role === 'user') {
+                msgRow.className = "flex items-start space-x-3 max-w-[85%] ml-auto flex-row-reverse space-x-reverse";
+                msgRow.innerHTML = `
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white flex-shrink-0 font-semibold text-xs">👨‍💻</div>
+                    <div class="bg-blue-600 text-white px-4 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
+                `;
+            } else {
+                msgRow.className = "flex items-start space-x-3 max-w-[85%]";
+                msgRow.innerHTML = `
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 font-semibold text-xs">🤖</div>
+                    <div class="space-y-2 flex-1">
+                        <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
+                        
+                        <div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md" id="container-${msgId}">
+                            <div class="flex items-center space-x-1 text-xs text-slate-400" data-msg-id="${msgId}">
+                                <span class="mr-1 text-[11px]">这次回答：</span>
+                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button>
+                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button>
+                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button>
+                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 4)">★</button>
+                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 5)">★</button>
+                                <span class="rating-status ml-2 text-[11px] text-slate-500"></span>
+                            </div>
+                            
+                            <div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2">
+                                <textarea id="textarea-${msgId}" placeholder="输入您的留言改进意见（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea>
+                                <button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md transition-all shadow-sm cursor-pointer">提交反馈</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            chatContainer.appendChild(msgRow);
+            scrollToBottom();
+        }
+
+        // 用来临时存放该气泡的分数
+        let currentScores = {};
+
+        // 1. 点击星星：点亮星星并滑出留言窗口
+        function handleStarClick(msgId, score) {
+            currentScores[msgId] = score; // 记录当前卡片分数
+            const box = document.getElementById(`container-${msgId}`);
+            const stars = box.querySelectorAll('.star-btn');
+            
+            stars.forEach((star, index) => {
+                if (index < score) star.classList.add('star-active');
+                else star.classList.remove('star-active');
+            });
+
+            // 展开留言区
+            document.getElementById(`comment-box-${msgId}`).classList.remove('hidden');
+            scrollToBottom();
+        }
+
+        // 2. 点击提交反馈：打包数据冲向后端 MongoDB
+        async function submitAllFeedback(msgId) {
+            const score = currentScores[msgId] || 5;
+            const comment = document.getElementById(`textarea-${msgId}`).value.trim();
+            const container = document.getElementById(`container-${msgId}`);
+
+            try {
+                // 发送 POST 请求到新写的 FastAPI 接口
+                const response = await fetch('/api/v1/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        msg_id: msgId,
+                        query: lastUserQuery,
+                        score: score,
+                        comment: comment
+                    })
+                });
+
+                const res = await response.json();
+                if (res.status === 'success') {
+                    // 反馈成功，把打分卡片变成漂亮而精简的成功提示
+                    container.innerHTML = `<p class="text-[11px] text-emerald-600 flex items-center">🎉 感谢您的宝贵意见！反馈已同步至本地 MongoDB 数据库。</p>`;
+                }
+            } catch (error) {
+                console.error("提交反馈报错:", error);
+                alert("写入数据库失败，请确认本地 MongoDB 服务是否已拉起。");
+            }
+        }
+
+        async function handleSend() {
+            const query = userInput.value.trim();
+            if (!query) return;
+
+            lastUserQuery = query; // 暂存问题
+            appendMessage('user', query);
+            userInput.value = '';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<span>思考中...</span>';
+
+            const loadingRow = document.createElement('div');
+            loadingRow.className = "flex items-start space-x-3 max-w-[85%]";
+            loadingRow.innerHTML = `
+                <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
+                <div class="bg-slate-100 text-slate-400 px-4 py-3 rounded-2xl rounded-tl-none text-sm italic">正在为您检索公司制度...</div>
+            `;
+            chatContainer.appendChild(loadingRow);
+            scrollToBottom();
+
+            try {
+                const response = await fetch('/api/v1/knowledge/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query })
+                });
+
+                const result = await response.json();
+                chatContainer.removeChild(loadingRow);
+
+                if (result.status === 'success' && result.data && result.data.answer) {
+                    appendMessage('assistant', result.data.answer);
+                } else {
+                    appendMessage('assistant', '⚠️ 系统解析错误，未能获取有效回复。');
+                }
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                chatContainer.removeChild(loadingRow);
+                appendMessage('assistant', '⚠️ 网络连接失败。');
+            } finally {
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<span>发送</span>';
+                userInput.focus();
+            }
+        }
+
+        sendBtn.addEventListener('click', handleSend);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+    </script>
+</body>
+</html>
