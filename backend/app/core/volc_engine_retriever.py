@@ -82,7 +82,6 @@ def _get_raw_knowledge_context(query: str) -> str:
     method = "POST"
     path = "/api/knowledge/service/chat"
     
-    # 调整 Prompt：命令知识库的 Agent 尽可能完整、详细地吐出原始规章制度，不要做过多精简
     prompt = f"请提取出与用户问题相关的、完整的规章制度核心条文片段。用户问题：{query}"
     
     request_params = {
@@ -107,10 +106,8 @@ def _get_raw_knowledge_context(query: str) -> str:
         rsp.encoding = "utf-8"
         result = rsp.json()
         
-        # 优先从检索生成的回答里拿，如果没有，从原始 chunks 拼接里拿
         if "data" in result and "generated_answer" in result["data"]:
             answer = result["data"]["generated_answer"]
-            # 清理可能存在的标签
             answer = re.sub(r'<reference\s+data-ref="[^"]+">.*?</reference>', '', answer, flags=re.DOTALL)
             answer = re.sub(r'<illustration.*?>.*?</illustration>', '', answer, flags=re.DOTALL)
             return answer.strip()
@@ -132,78 +129,107 @@ def _get_raw_knowledge_context(query: str) -> str:
 
 def knowledge_service_chat(query: str) -> str:
     """
-    对外主入口：知识库纯检索 + 豆包大模型智能 HR 润色 (RAG 完整体)
-    
-    Args:
-        query: 用户的问题
-    
-    Returns:
-        str: 豆包大模型结合知识库规章，用 HR 语气润色后的完美大白话回答
+    对外主入口：知识库纯检索 + 豆包大模型智能 HR 润色 (非流式一次性返回旧版本)
     """
-    # 1. 召回原始知识库干货
     raw_context = _get_raw_knowledge_context(query)
-    
-    # 2. 如果知识库完全没捞到有效东西，或者抛错，给个空兜底标识
     if not raw_context or "未获取到有效回答" in raw_context:
         raw_context = "（暂无相关公司内部规章制度参考）"
 
-    # 3. 准备调用你在 .env 里配好的豆包大模型 (豆包完全兼容 OpenAI 协议)
     llm_api_key = volc_ark_api_key or apikey
     llm_base_url = volc_ark_base_url
     
-    # 健全性检查：如果没有配模型接入点，则直接高可用降级，返回原始知识库内容
     if not volc_ark_model or volc_ark_model.startswith("gpt"):
-        # 如果 env 里的 OPENAI_MODEL 是 gpt 或者是空的，为了防止报错，我们直接返回原始知识库
         print("\n📄 [高可用兜底] 未检测到有效的豆包模型 Endpoint，直接返回原始知识库内容。")
         return raw_context
 
     try:
-        # 4. 初始化豆包大模型客户端
-        client = OpenAI(
-            api_key=llm_api_key,
-            base_url=llm_base_url
-        )
-        
-        # 5. 设计 RAG 核心灵魂：System Prompt
+        client = OpenAI(api_key=llm_api_key, base_url=llm_base_url)
         system_prompt = (
             "你是一位非常专业、亲切、有温度的公司企业 HR 助手。\n"
             "请结合以下由公司官方提供的【内部规章制度参考材料】，来回答员工的问题。\n\n"
-            "【核心行为准则】：\n"
+            "【核心行为准则】:\n"
             "1. 必须优先基于给定的【参考材料】进行回答。回答要清晰、准确、条理分明。\n"
             "2. 语气一定要温柔、有耐心、礼貌，多使用‘您’、‘祝您’等称呼，符合一个好 HR 的职场形象。\n"
-            "3. 如果材料中有具体天数、福利或报销标准（例如：陪产假15个自然日，全额带薪），请极其明确地告知员工，不要说‘大概’或‘可能’。\n"
-            "4. 如果参考材料里【完全没有】提到员工问的事情（比如员工问你写代码或者娱乐八卦），请委婉且礼貌地回应：\n"
-            "   ‘您好，目前的制度库中暂未查到相关细节说明。为了不误导您，建议您直接联系 HR 团队或查看内部最新公告哦。’，绝对不要自己瞎编乱造。\n\n"
-            f"【内部规章制度参考材料】：\n{raw_context}"
+            "3. 如果材料中有具体天数、福利或报销标准（例如：陪产假15个自然日，全额带薪），请极其明确地告知员工。\n"
+            "4. 如果参考材料里【完全没有】提到员工问的事情，请委婉且礼貌地回应：‘您好，目前的制度库中暂未查到相关细节说明。为了不误导您，建议您直接联系 HR 团队或查看内部最新公告哦。’，绝对不要瞎编。\n\n"
+            f"【内部规章制度参考材料】:\n{raw_context}"
         )
         
-        # 6. 请求大模型
         completion = client.chat.completions.create(
             model=volc_ark_model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": query}
             ],
-            temperature=0.3,  # 低随机性，确保严格靠谱
+            temperature=0.3,
         )
-        
-        llm_answer = completion.choices[0].message.content.strip()
-        print("\n✨ [豆包大模型润色回答]：")
-        print(llm_answer)
-        return llm_answer
-
+        return completion.choices[0].message.content.strip()
     except Exception as e:
-        # 高可用兜底：如果大模型欠费了、网络崩了或者接入点错了，直接把刚才测试成功的“原始纯干货”扔给前端，保证用户绝对不会看到报错！
         print(f"\n⚠️ [大模型润色异常]: {str(e)} -> 触发高可用兜底，直接返回原始知识库。")
         return raw_context
 
 
-if __name__ == "__main__":
+def knowledge_service_chat_stream(query: str):
     """
-    主测试入口
+    🔥 新增对外主入口：知识库纯检索 + 豆包大模型流式打字机输出 (RAG 流式完整体)
     """
-    query = input("请输入你想测试的员工问题：").strip()
-    if not query:
-        query = "陪产假有多少天？"
+    # 1. 召回原始知识库干货
+    raw_context = _get_raw_knowledge_context(query)
     
-    knowledge_service_chat(query)
+    if not raw_context or "未获取到有效回答" in raw_context:
+        raw_context = "（暂无相关公司内部规章制度参考）"
+
+    llm_api_key = volc_ark_api_key or apikey
+    llm_base_url = volc_ark_base_url
+    
+    # 健全性检查：如果没有配模型接入点，则直接将原始知识库切字流式返回进行兜底
+    if not volc_ark_model or volc_ark_model.startswith("gpt"):
+        print("\n📄 [高可用流式兜底] 未检测到有效的豆包模型 Endpoint，流式返回原始知识库内容。")
+        for char in raw_context:
+            yield char
+        return
+
+    try:
+        # 2. 初始化大模型客户端
+        client = OpenAI(
+            api_key=llm_api_key,
+            base_url=llm_base_url
+        )
+        
+        system_prompt = (
+            "你是一位非常专业、亲切、有温度的公司企业 HR 助手。\n"
+            "请结合以下由公司官方提供的【内部规章制度参考材料】，来回答员工的问题。\n\n"
+            "【核心行为准则】:\n"
+            "1. 必须优先基于给定的【参考材料】进行回答。回答要清晰、准确、条理分明。\n"
+            "2. 语气一定要温柔、有耐心、礼貌，多使用‘您’、‘祝您’等称呼，符合一个好 HR 的职场形象。\n"
+            "3. 如果材料中有具体天数、福利或报销标准（例如：陪产假15个自然日，全额带薪），请极其明确地告知员工。\n"
+            "4. 如果参考材料里【完全没有】提到员工问的事情，请委婉且礼貌地回应：‘您好，目前的制度库中暂未查到相关细节说明。为了不误导您，建议您直接联系 HR 团队或查看内部最新公告哦。’，绝对不要瞎编。\n\n"
+            f"【内部规章制度参考材料】:\n{raw_context}"
+        )
+        
+        # 3. 🔥 开启 stream=True
+        response = client.chat.completions.create(
+            model=volc_ark_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": query}
+            ],
+            temperature=0.3,
+            stream=True  # 开启大模型流式返回
+        )
+        
+        # 4. 🔥 源源不断地把吐出来的字 yield 出去
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        print(f"\n⚠️ [大模型流式润色异常]: {str(e)} -> 触发流式兜底。")
+        for char in raw_context:
+            yield char
+
+
+if __name__ == "__main__":
+    query = "陪产假有多少天？"
+    for text in knowledge_service_chat_stream(query):
+        print(text, end="", flush=True)

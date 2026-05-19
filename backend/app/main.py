@@ -46,13 +46,12 @@ async def server_on_start():
         print(f"====== ❌ MongoDB 连接失败！请检查服务是否开启。错误: {e} ======")
 
 
-# --- 📝 2. 定义打分留言的数据结构 (Pydantic) ---
+# --- 📝 2. 完美对齐前端的数据结构 (Pydantic) ---
 class FeedbackModel(BaseModel):
     msg_id: str = Field(..., description="消息的唯一ID")
     query: str = Field("", description="员工当时问的问题")
     score: int = Field(..., ge=1, le=5, description="1-5星打分")
     comment: str = Field("", description="员工填写的改进意见")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # --- ⚙️ 初始化模板引擎 ---
@@ -71,17 +70,28 @@ if settings.all_cors_origins:
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# --- 📬 3. 新增：接收前端反馈并写入 MongoDB 的接口 ---
+# --- 📬 3. 接收前端反馈并写入 MongoDB 的接口 ---
 @app.post("/api/v1/feedback")
 async def save_feedback(feedback: FeedbackModel):
     try:
-        # 将 Pydantic 模型转为字典
+        # 1. 将 Pydantic 模型转为原生 Python 字典
+        # 使用你 main.py 里的 model_dump() 
         feedback_dict = feedback.model_dump()
-        # 异步插入到 MongoDB
+        
+        # 2. 在这里单独追加服务器标准时间戳，存入 MongoDB，完美避开 Pydantic 校验冲突
+        feedback_dict["created_at"] = datetime.now()
+        
+        # 3. 异步插入到 MongoDB 数据库中
         result = await feedback_collection.insert_one(feedback_dict)
-        return {"status": "success", "message": "反馈保存成功", "id": str(result.inserted_id)}
+        
+        if result.inserted_id:
+            print(f"📊 [MongoDB 成功写入] 收到新反馈！ID: {feedback.msg_id}，分数: {feedback.score}")
+            return {"status": "success", "message": "反馈已成功同步至本地数据库"}
+            
+        raise HTTPException(status_code=500, detail="数据未能成功写入")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"数据库写入失败: {str(e)}")
+        print(f"❌ [MongoDB 写入异常]: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"MongoDB 写入异常: {str(e)}")
 
 
 # --- 🎨 根路径路由返回聊天页面 ---

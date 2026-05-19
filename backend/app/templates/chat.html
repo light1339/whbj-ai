@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>星宇网络 - 智能 HR 助手</title>
+    <title>危化镖局 - 智能 HR 助手</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
@@ -22,40 +22,47 @@
                 <span class="text-white font-bold text-lg">HR</span>
             </div>
             <div>
-                <h1 class="text-slate-800 font-bold text-base">智能 HR 助手</h1>
+                <h1 class="text-slate-800 font-bold text-base leading-tight">智能 HR 助手</h1>
                 <p class="text-slate-400 text-xs flex items-center">
-                    <span class="w-2 h-2 bg-emerald-500 rounded-full inline-block mr-1.5 animate-pulse"></span>
-                    豆包大模型 RAG 驱动
+                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse"></span>
+                    基于公司最新内部规章制度库
                 </p>
             </div>
         </div>
-        <span class="text-slate-400 text-xs font-medium bg-slate-100 px-2.5 py-1 rounded-full">内部测试版 v1.0</span>
+        <div class="text-slate-400 text-xs font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200/60 shadow-inner">
+            测试版本
+        </div>
     </header>
 
-    <main id="chat-container" class="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar">
+    <main class="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar" id="chatContainer">
         <div class="flex items-start space-x-3 max-w-[85%]">
-            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 font-semibold text-xs">🤖</div>
+            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
             <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed">
-                您好！我是您的智能 HR 助手。请问有什么我可以帮您的吗？
+                您好！我是智能 HR 助手。关于公司内部的**考勤休假、薪酬福利、报销规范、日常行政**等制度，您随时可以问我。
             </div>
         </div>
     </main>
 
-    <footer class="bg-white border-t border-slate-200 p-4 shadow-md">
-        <div class="max-w-4xl mx-auto flex items-center space-x-3">
-            <input type="text" id="user-input" placeholder="试着问问：陪产假有多少天？" class="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-sm text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"/>
-            <button id="send-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-3 rounded-xl text-sm transition-all shadow-md shadow-blue-100 cursor-pointer disabled:bg-slate-300 flex items-center space-x-1">
+    <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
+        <div class="max-w-4xl mx-auto flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all duration-200">
+            <input type="text" id="userInput" placeholder="请输入您的制度疑问（如：陪产假多少天？报销比例？）..." class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none" autocomplete="off">
+            <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center space-x-1 flex-shrink-0 cursor-pointer disabled:opacity-50">
                 <span>发送</span>
             </button>
         </div>
     </footer>
 
     <script>
-        const chatContainer = document.getElementById('chat-container');
-        const userInput = document.getElementById('user-input');
-        const sendBtn = document.getElementById('send-btn');
+        const chatContainer = document.getElementById('chatContainer');
+        const userInput = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
 
-        // 本地临时存储用户最后一次提出的query，用于跟反馈打分绑定
+        // 📝 全局状态存储映射：用于多轮对话中记录某次回答对应的问题
+        const messageQueryMap = {};
+        // ⭐ 存储每次回答的用户实时评分状态
+        const activeRatings = {};
+
+        // 💡 修复 ReferenceError：在此处显式用 let 声明全局记录变量
         let lastUserQuery = "";
 
         function scrollToBottom() {
@@ -64,138 +71,185 @@
 
         function appendMessage(role, text) {
             const msgRow = document.createElement('div');
-            const msgId = 'msg-' + Date.now();
+            msgRow.className = role === 'user' ? "flex items-start space-x-3 max-w-[85%] ml-auto justify-end" : "flex items-start space-x-3 max-w-[85%]";
             
             if (role === 'user') {
-                msgRow.className = "flex items-start space-x-3 max-w-[85%] ml-auto flex-row-reverse space-x-reverse";
                 msgRow.innerHTML = `
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white flex-shrink-0 font-semibold text-xs">👨‍💻</div>
-                    <div class="bg-blue-600 text-white px-4 py-3 rounded-2xl rounded-tr-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
+                    <div class="bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
+                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white flex-shrink-0 text-xs font-bold">我</div>
                 `;
             } else {
-                msgRow.className = "flex items-start space-x-3 max-w-[85%]";
                 msgRow.innerHTML = `
-                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 font-semibold text-xs">🤖</div>
-                    <div class="space-y-2 flex-1">
-                        <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
-                        
-                        <div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md" id="container-${msgId}">
-                            <div class="flex items-center space-x-1 text-xs text-slate-400" data-msg-id="${msgId}">
-                                <span class="mr-1 text-[11px]">这次回答：</span>
-                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button>
-                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button>
-                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button>
-                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 4)">★</button>
-                                <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 5)">★</button>
-                                <span class="rating-status ml-2 text-[11px] text-slate-500"></span>
-                            </div>
-                            
-                            <div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2">
-                                <textarea id="textarea-${msgId}" placeholder="输入您的留言改进意见（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea>
-                                <button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md transition-all shadow-sm cursor-pointer">提交反馈</button>
-                            </div>
-                        </div>
-                    </div>
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
+                    <div class="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>
                 `;
             }
-            
             chatContainer.appendChild(msgRow);
             scrollToBottom();
-        }
-
-        // 用来临时存放该气泡的分数
-        let currentScores = {};
-
-        // 1. 点击星星：点亮星星并滑出留言窗口
-        function handleStarClick(msgId, score) {
-            currentScores[msgId] = score; // 记录当前卡片分数
-            const box = document.getElementById(`container-${msgId}`);
-            const stars = box.querySelectorAll('.star-btn');
-            
-            stars.forEach((star, index) => {
-                if (index < score) star.classList.add('star-active');
-                else star.classList.remove('star-active');
-            });
-
-            // 展开留言区
-            document.getElementById(`comment-box-${msgId}`).classList.remove('hidden');
-            scrollToBottom();
-        }
-
-        // 2. 点击提交反馈：打包数据冲向后端 MongoDB
-        async function submitAllFeedback(msgId) {
-            const score = currentScores[msgId] || 5;
-            const comment = document.getElementById(`textarea-${msgId}`).value.trim();
-            const container = document.getElementById(`container-${msgId}`);
-
-            try {
-                // 发送 POST 请求到新写的 FastAPI 接口
-                const response = await fetch('/api/v1/feedback', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        msg_id: msgId,
-                        query: lastUserQuery,
-                        score: score,
-                        comment: comment
-                    })
-                });
-
-                const res = await response.json();
-                if (res.status === 'success') {
-                    // 反馈成功，把打分卡片变成漂亮而精简的成功提示
-                    container.innerHTML = `<p class="text-[11px] text-emerald-600 flex items-center">🎉 感谢您的宝贵意见！反馈已同步至本地 MongoDB 数据库。</p>`;
-                }
-            } catch (error) {
-                console.error("提交反馈报错:", error);
-                alert("写入数据库失败，请确认本地 MongoDB 服务是否已拉起。");
-            }
         }
 
         async function handleSend() {
             const query = userInput.value.trim();
             if (!query) return;
 
-            lastUserQuery = query; // 暂存问题
+            // 💡 赋值时不会再报错
+            lastUserQuery = query;
             appendMessage('user', query);
             userInput.value = '';
             userInput.disabled = true;
             sendBtn.disabled = true;
             sendBtn.innerHTML = '<span>思考中...</span>';
 
-            const loadingRow = document.createElement('div');
-            loadingRow.className = "flex items-start space-x-3 max-w-[85%]";
-            loadingRow.innerHTML = `
+            // 创建打字机气泡
+            const msgRow = document.createElement('div');
+            const msgId = 'msg-' + Date.now();
+            messageQueryMap[msgId] = query; // 将本次问题和ID存入全局映射
+            
+            msgRow.className = "flex items-start space-x-3 max-w-[85%]";
+            msgRow.innerHTML = `
                 <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
-                <div class="bg-slate-100 text-slate-400 px-4 py-3 rounded-2xl rounded-tl-none text-sm italic">正在为您检索公司制度...</div>
+                <div class="space-y-2 flex-1">
+                    <div id="text-${msgId}" class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap"><span class="text-slate-400 italic animate-pulse">AI 正在组织语言，请稍候...</span></div>
+                    
+                    <div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md hidden" id="container-${msgId}">
+                        <div class="flex items-center space-x-1 text-xs text-slate-400">
+                            <span class="mr-1 text-[11px]">此次回答评分：</span>
+                            <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button>
+                            <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button>
+                            <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button>
+                            <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 4)">★</button>
+                            <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 5)">★</button>
+                            <span id="status-${msgId}" class="rating-status ml-2 text-[11px] text-slate-500"></span>
+                        </div>
+                        <div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2">
+                            <textarea id="textarea-${msgId}" placeholder="请输入您的改进意见或期望（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea>
+                            <button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md shadow-sm cursor-pointer">提交反馈</button>
+                        </div>
+                    </div>
+                </div>
             `;
-            chatContainer.appendChild(loadingRow);
+            
+            chatContainer.appendChild(msgRow);
             scrollToBottom();
 
+            const textContainer = document.getElementById(`text-${msgId}`);
+            let accumulatedText = "";
+
             try {
+                // 向后端挂载的知识库子路由正式发起流式请求
                 const response = await fetch('/api/v1/knowledge/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: query })
                 });
 
-                const result = await response.json();
-                chatContainer.removeChild(loadingRow);
-
-                if (result.status === 'success' && result.data && result.data.answer) {
-                    appendMessage('assistant', result.data.answer);
-                } else {
-                    appendMessage('assistant', '⚠️ 系统解析错误，未能获取有效回复。');
+                if (!response.ok) {
+                    throw new Error(`HTTP 错误！状态码: ${response.status}`);
                 }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const dataContent = line.slice(6).trim();
+                            
+                            if (dataContent === '[DONE]') {
+                                // 传输完全结束，优雅展现星级面板
+                                document.getElementById(`container-${msgId}`).classList.remove('hidden');
+                                break;
+                            }
+                            
+                            try {
+                                const parsed = JSON.parse(dataContent);
+                                if (parsed.text) {
+                                    if (accumulatedText === "") {
+                                        textContainer.innerHTML = ""; // 抹去等待提示
+                                    }
+                                    accumulatedText += parsed.text;
+                                    textContainer.textContent = accumulatedText; // 渲染到界面上
+                                    scrollToBottom();
+                                }
+                            } catch (e) {
+                                console.error("流块 JSON 解析失败:", e);
+                            }
+                        }
+                    }
+                }
+
             } catch (error) {
-                console.error('Fetch Error:', error);
-                chatContainer.removeChild(loadingRow);
-                appendMessage('assistant', '⚠️ 网络连接失败。');
+                console.error('流式传输失败:', error);
+                textContainer.innerHTML = '⚠️ 系统连接大模型超时或流数据中断，请稍后重试。';
             } finally {
                 userInput.disabled = false;
                 sendBtn.disabled = false;
                 sendBtn.innerHTML = '<span>发送</span>';
                 userInput.focus();
+                scrollToBottom();
+            }
+        }
+
+        function handleStarClick(msgId, score) {
+            activeRatings[msgId] = score;
+            const container = document.getElementById(`container-${msgId}`);
+            const stars = container.querySelectorAll('.star-btn');
+            
+            stars.forEach((star, index) => {
+                if (index < score) {
+                    star.classList.add('star-active');
+                } else {
+                    star.classList.remove('star-active');
+                }
+            });
+
+            const statusTxt = document.getElementById(`status-${msgId}`);
+            const textMap = {1: '很不满意 ☹️', 2: '不满意 🙁', 3: '一般 😐', 4: '满意 🙂', 5: '非常满意 😍'};
+            statusTxt.innerText = textMap[score] || '';
+
+            // 展开反馈留言框
+            document.getElementById(`comment-box-${msgId}`).classList.remove('hidden');
+            scrollToBottom();
+        }
+
+        async function submitAllFeedback(msgId) {
+            const score = activeRatings[msgId];
+            if (!score) return;
+
+            const comment = document.getElementById(`textarea-${msgId}`).value.trim();
+            const originalQuery = messageQueryMap[msgId] || ""; // 提取当次关联的用户提问
+
+            // 💡 完全与后端的 Pydantic FeedbackModel 字段对齐：msg_id, query, score, comment
+            const payload = {
+                msg_id: msgId,
+                query: originalQuery,
+                score: parseInt(score),
+                comment: comment
+            };
+
+            try {
+                const response = await fetch('/api/v1/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const resData = await response.json();
+                if (response.ok && resData.status === "success") {
+                    const commentBox = document.getElementById(`comment-box-${msgId}`);
+                    commentBox.innerHTML = `<p class="text-xs text-emerald-600 font-medium pt-1">✓ 谢谢反馈！评价数据已实时同步至本地 MongoDB 数据库中。</p>`;
+                } else {
+                    alert("同步数据库失败，请检查后端 MongoDB 连接状况。");
+                }
+            } catch (err) {
+                console.error("提交反馈出错:", err);
+                alert("网络连接异常，无法写入本地数据库。");
             }
         }
 
