@@ -64,6 +64,15 @@
     </footer>
 
     <script>
+        // ====== 🚪 前端主页安全守卫 ======
+        (function() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                alert('⚠️ 您尚未登录或登录已过期，请先登录！');
+                window.location.href = '/login'; // 强行轰回登录页
+            }
+        })();
+        // ================================
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
