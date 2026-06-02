@@ -3,74 +3,276 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>危化镖局 - 智能 HR 助手</title>
+    <title>危化镖局 - 智能政策问答机器人</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .star-active { color: #f59e0b !important; transform: scale(1.1); }
         .star-btn { transition: all 0.15s ease-in-out; }
         .star-btn:hover { transform: scale(1.2); }
+        
+        /* 新规滚动条平滑动画 */
+        @keyframes scroll-left {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-scroll {
+            display: flex;
+            width: max-content;
+            animation: scroll-left 30s linear infinite;
+        }
+        .animate-scroll:hover { animation-play-state: paused; }
+
+        /* 清除上下文刷新动画 */
+        @keyframes fadeOutBlur {
+            0%   { opacity: 1; filter: blur(0px); transform: scale(1); }
+            100% { opacity: 0; filter: blur(6px); transform: scale(0.97); }
+        }
+        @keyframes fadeInSlide {
+            0%   { opacity: 0; transform: translateY(10px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes sweepFlash {
+            0%   { opacity: 0; transform: translateY(-100%); }
+            40%  { opacity: 0.18; }
+            100% { opacity: 0; transform: translateY(100%); }
+        }
+        .chat-clearing {
+            animation: fadeOutBlur 0.35s ease-out forwards;
+            pointer-events: none;
+        }
+        .chat-restored {
+            animation: fadeInSlide 0.4s ease-out forwards;
+        }
+        /* 页面顶层扫光蒙版 */
+        #clearFlashOverlay {
+            position: fixed; inset: 0; z-index: 9999;
+            background: linear-gradient(180deg, rgba(99,102,241,0.18) 0%, rgba(59,130,246,0.10) 50%, transparent 100%);
+            pointer-events: none;
+            opacity: 0;
+        }
+        #clearFlashOverlay.active {
+            animation: sweepFlash 0.55s ease-in-out forwards;
+        }
     </style>
 </head>
-<body class="bg-slate-50 h-screen flex flex-col font-sans">
+<body class="bg-slate-50 h-screen flex flex-col font-sans overflow-hidden m-0 p-0">
 
-    <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
         <div class="flex items-center space-x-3">
             <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-md shadow-blue-200">
-                <span class="text-white font-bold text-lg">HR</span>
+                <span class="text-white font-bold text-lg">🤖</span>
             </div>
             <div>
-                <h1 class="text-slate-800 font-bold text-base leading-tight">智能 HR 助手</h1>
-                <p class="text-slate-400 text-xs flex items-center">
+                <h1 class="text-slate-800 font-bold text-base leading-tight">危化镖局 - 智能政策机器人</h1>
+                <p class="text-slate-400 text-xs flex items-center mt-0.5">
                     <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse"></span>
-                    基于公司最新内部规章制度库
+                    最新政策法规与规章制度库已同步
                 </p>
             </div>
         </div>
-        <div class="text-slate-400 text-xs font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200/60 shadow-inner">
-            Changsha Xingyu Network Co., Ltd.
+        <div class="flex items-center space-x-3">
+            <!-- 多轮对话状态指示器 -->
+            <div id="contextBadge" class="hidden items-center space-x-1 text-xs bg-indigo-50 border border-indigo-200 text-indigo-500 px-2.5 py-1 rounded-lg transition-all">
+                <span>🔗</span>
+                <span id="contextBadgeText">上下文 0 轮</span>
+            </div>
+            <div class="text-slate-400 text-xs font-medium bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200/60 shadow-inner">
+                Changsha Xingyu Network Co., Ltd.
+            </div>
         </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar" id="chatContainer">
-        <div class="flex items-start space-x-3 max-w-[85%]">
-            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
-            <div class="space-y-3 flex-1">
-                <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed">
-                    您好！我是危化镖局的智能 HR 助手。关于系统版本更新和公司制度问题，您随时可以问我。
+    <!-- 🆕 优化一：时政/新规动态滚动条 -->
+    <div class="bg-amber-50 border-b border-amber-100 h-9 flex items-center overflow-hidden flex-shrink-0 px-6 text-xs text-amber-800">
+        <div class="flex items-center space-x-2 font-bold flex-shrink-0 bg-amber-50 pr-4 z-10 shadow-[8px_0_6px_-4px_rgba(251,243,219,1)]">
+            <span>📢</span>
+            <span>最新政策快讯：</span>
+        </div>
+        <div class="flex-1 overflow-hidden relative">
+            <div class="animate-scroll whitespace-nowrap flex space-x-12">
+                <!-- 第一组 -->
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('国务院安全委会2026最新危险化学品全链条监管通知')">① 国务院安委会：强化危化品运输、使用、废弃处置全链条监管 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('解读全国安全生产专项整治三年行动计划')">② 《全国安全生产专项整治三年行动计划》核心治理领域指南 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('本地针对非法倾倒处置危险废物违法犯罪专项行动通告')">③ 专项行动：严厉打击非法倾倒处置危险废物违法犯罪行为 →</span>
+                <!-- 第二组（用于无缝循环滚动） -->
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('国务院安全委会2026最新危险化学品全链条监管通知')">① 国务院安委会：强化危化品运输、使用、废弃处置全链条监管 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('解读全国安全生产专项整治三年行动计划')">② 《全国安全生产专项整治三年行动计划》核心治理领域指南 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillSuggestion('本地针对非法倾倒处置危险废物违法犯罪专项行动通告')">③ 专项行动：严厉打击非法倾倒处置危险废物违法犯罪行为 →</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主体布局：采用经典的 聊天流 + 右侧热点看板 双栏结构 -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- 左侧聊天区域 -->
+        <div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+            <main class="flex-1 overflow-y-auto px-6 py-6 space-y-6 custom-scrollbar" id="chatContainer">
+                <!-- 机器人首语 -->
+                <div class="flex items-start space-x-3 max-w-[85%]">
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-sm">🤖</div>
+                    <div class="space-y-3 flex-1">
+                        <div class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed">
+                            您好！我是危化镖局智能政策机器人。您可以向我咨询最新的国家政策、地方规章或企业安全生产合规标准。支持多轮连续追问，我会为您深度提炼条文要点。
+                        </div>
+                        
+                        <!-- 常用引导标签 -->
+                        <div class="flex flex-wrap gap-2 pl-1">
+                            <button onclick="fillSuggestion('危险废物安全整治详解')" class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 text-xs px-3 py-1.5 rounded-full shadow-sm transition-all duration-150 cursor-pointer flex items-center space-x-1">
+                                <span>☣️</span> <span>危险废物安全整治详解</span>
+                            </button>
+                            <button onclick="fillSuggestion('九条专项治理指南的第九条内容？')" class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 text-xs px-3 py-1.5 rounded-full shadow-sm transition-all duration-150 cursor-pointer flex items-center space-x-1">
+                                <span>📜</span> <span>九条专项治理指南第九条</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="flex flex-wrap gap-2 pl-1">
-                    <button onclick="fillSuggestion('最近更新的版本是多少？')" class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 text-xs px-3 py-1.5 rounded-full shadow-sm transition-all duration-150 cursor-pointer flex items-center space-x-1">
-                        <span>📅</span> <span>最近更新的版本是多少？</span>
+            </main>
+
+            <!-- 底部输入及控制区 -->
+            <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] flex-shrink-0">
+                <div class="max-w-4xl mx-auto flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all duration-200">
+                    <input type="text" id="userInput" placeholder="请输入政策关键词或合规疑问（如：非法倾倒危废怎么处罚？安全生产三年计划？）..." class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none" autocomplete="off">
+                    <button id="clearContextBtn" onclick="clearContext()" title="清除对话上下文，开启新话题" class="hidden text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-red-50 transition-all duration-150 cursor-pointer flex-shrink-0 text-xs">
+                        🗑️ 清除上下文
                     </button>
-                    <button onclick="fillSuggestion('请假流程？')" class="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 text-slate-600 hover:text-blue-600 text-xs px-3 py-1.5 rounded-full shadow-sm transition-all duration-150 cursor-pointer flex items-center space-x-1">
-                        <span>✈️</span> <span>请假流程？</span>
+                    <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center space-x-1 flex-shrink-0 cursor-pointer disabled:opacity-50">
+                        <span>发送</span>
                     </button>
+                </div>
+            </footer>
+        </div>
+
+        <!-- 🆕 优化二：右侧常驻政策看板（热点聚焦） -->
+        <div class="w-80 border-l border-slate-200 bg-white p-4 flex flex-col space-y-4 custom-scrollbar overflow-y-auto hidden lg:flex flex-shrink-0">
+            <div>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🔥 高频合规检索词</h3>
+                <div class="flex flex-wrap gap-2">
+                    <span onclick="fillSuggestion('危险化学品安全')" class="text-xs bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 危险化学品安全</span>
+                    <span onclick="fillSuggestion('废弃处置全链条')" class="text-xs bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 废弃处置全链条</span>
+                    <span onclick="fillSuggestion('三年行动计划')" class="text-xs bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 三年行动计划</span>
+                    <span onclick="fillSuggestion('非法倾倒处罚标准')" class="text-xs bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 非法倾倒处罚</span>
+                </div>
+            </div>
+            
+            <hr class="border-slate-100">
+
+            <div>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">📚 权威参考政策库</h3>
+                <div class="space-y-2">
+                    <a href="https://www.weihuabiaoju.com/ptnpc/home" target="_blank" rel="noopener noreferrer" class="block p-2.5 bg-slate-50 rounded-lg border border-slate-200/60 hover:border-blue-300 hover:bg-blue-50/40 transition-all group">
+                        <div class="flex items-start justify-between space-x-1">
+                            <h4 class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition-colors leading-snug">危化镖局 - 危化品物流平台</h4>
+                            <span class="text-slate-300 group-hover:text-blue-400 transition-colors flex-shrink-0 text-[11px] mt-0.5">↗</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">危险化学品运输 · 危险品押运</p>
+                    </a>
+                    <a href="https://www.weihuabiaoju.com/ptnpc/software" target="_blank" rel="noopener noreferrer" class="block p-2.5 bg-slate-50 rounded-lg border border-slate-200/60 hover:border-blue-300 hover:bg-blue-50/40 transition-all group">
+                        <div class="flex items-start justify-between space-x-1">
+                            <h4 class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition-colors leading-snug">危化镖局产品与服务</h4>
+                            <span class="text-slate-300 group-hover:text-blue-400 transition-colors flex-shrink-0 text-[11px] mt-0.5">↗</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">化工运输综合服务</p>
+                    </a>
                 </div>
             </div>
         </div>
-    </main>
 
-    <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)]">
-        <div class="max-w-4xl mx-auto flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all duration-200">
-            <input type="text" id="userInput" placeholder="请输入您的疑问（如：最近版本的功能有哪些？迟到扣费规则？）..." class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none" autocomplete="off">
-            <button id="sendBtn" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center space-x-1 flex-shrink-0 cursor-pointer disabled:opacity-50">
-                <span>发送</span>
-            </button>
-        </div>
-    </footer>
+    </div>
 
+    <!-- 清除上下文扫光蒙版 -->
+    <div id="clearFlashOverlay"></div>
+
+    <!-- 脚本逻辑逻辑控制 -->
     <script>
+        // ====== 前端主页安全守卫 ======
+        (function() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                // 演示模式下如无token暂不强制拦截，方便开发预览
+                console.warn('⚠️ 未检测到登录 Token');
+            }
+        })();
+
         const chatContainer = document.getElementById('chatContainer');
         const userInput = document.getElementById('userInput');
         const sendBtn = document.getElementById('sendBtn');
+        const clearContextBtn = document.getElementById('clearContextBtn');
+        const contextBadge = document.getElementById('contextBadge');
+        const contextBadgeText = document.getElementById('contextBadgeText');
 
         const messageQueryMap = {};
         const activeRatings = {};
         let lastUserQuery = "";
+
+        const MAX_HISTORY_TURNS = 3;
+        let conversationHistory = [];
+
+        function updateContextUI() {
+            const turns = Math.floor(conversationHistory.length / 2);
+            if (turns > 0) {
+                contextBadge.classList.remove('hidden');
+                contextBadge.classList.add('flex');
+                contextBadgeText.textContent = `上下文 ${turns} 轮`;
+                clearContextBtn.classList.remove('hidden');
+            } else {
+                contextBadge.classList.add('hidden');
+                contextBadge.classList.remove('flex');
+                clearContextBtn.classList.add('hidden');
+            }
+        }
+
+        function clearContext() {
+            // 防止重复点击
+            if (chatContainer.classList.contains('chat-clearing')) return;
+
+            // 第一阶段：内容淡出模糊
+            chatContainer.classList.add('chat-clearing');
+
+            // 扫光特效
+            const overlay = document.getElementById('clearFlashOverlay');
+            overlay.classList.remove('active');
+            void overlay.offsetWidth; // reflow 强制重置动画
+            overlay.classList.add('active');
+
+            setTimeout(() => {
+                // 第二阶段：清除数据，重置聊天区
+                conversationHistory = [];
+                updateContextUI();
+
+                // 清空聊天内容，保留首条欢迎语
+                const welcomeNode = chatContainer.firstElementChild;
+                chatContainer.innerHTML = '';
+                if (welcomeNode) chatContainer.appendChild(welcomeNode);
+
+                // 插入分隔提示
+                const divider = document.createElement('div');
+                divider.className = "flex items-center justify-center my-2 chat-restored";
+                divider.innerHTML = `
+                    <div class="flex items-center space-x-2 text-xs text-slate-400">
+                        <div class="h-px w-16 bg-slate-200"></div>
+                        <span class="bg-slate-100 border border-slate-200 px-3 py-1 rounded-full flex items-center space-x-1">
+                            <span>✨</span><span>已开启新话题，上下文已清除</span>
+                        </span>
+                        <div class="h-px w-16 bg-slate-200"></div>
+                    </div>
+                `;
+                chatContainer.appendChild(divider);
+
+                // 第三阶段：内容淡入恢复
+                chatContainer.classList.remove('chat-clearing');
+                chatContainer.classList.add('chat-restored');
+                chatContainer.addEventListener('animationend', () => {
+                    chatContainer.classList.remove('chat-restored');
+                }, { once: true });
+
+                scrollToBottom();
+            }, 360);
+        }
 
         function scrollToBottom() {
             chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
@@ -95,6 +297,21 @@
             scrollToBottom();
         }
 
+        // 🆕 新增：根据 AI 回答的内容智能推荐 2-3 个延展问题
+        function generateExtendQuestions(query, text) {
+            if (text.includes('危险废物') || query.includes('危废')) {
+                return [
+                    '💡 相关追问：如何判定企业处置危废的过程是否合规？',
+                    '💡 地方细则：河北省对非法倾倒的处罚有哪些具体的执行要求？',
+                    '💡 办事指南：企业如何正确完成危废处置全链条的资质备案？'
+                ];
+            }
+            return [
+                '💡 延伸了解：该项政策的具体落地执行时间节点是何时？',
+                '💡 关联法规：有哪些配套的国家强制性技术规范需要参考？'
+            ];
+        }
+
         async function handleSend() {
             const query = userInput.value.trim();
             if (!query) return;
@@ -106,21 +323,29 @@
             sendBtn.disabled = true;
             sendBtn.innerHTML = '<span>思考中...</span>';
 
+            conversationHistory.push({ role: "user", content: query });
+            const historyToSend = conversationHistory.slice(0, -1).slice(-(MAX_HISTORY_TURNS * 2));
+
             const msgRow = document.createElement('div');
             const msgId = 'msg-' + Date.now();
-            messageQueryMap[msgId] = query; 
+            messageQueryMap[msgId] = query;
             
             msgRow.className = "flex items-start space-x-3 max-w-[85%]";
             msgRow.innerHTML = `
                 <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div>
-                <div class="space-y-2 flex-1">
+                <div class="space-y-3 flex-1">
+                    <!-- 回答核心区 -->
                     <div id="text-${msgId}" class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap flex items-center space-x-2">
-                        <span class="text-blue-500 font-medium animate-pulse">🔍 正在检索公司资料库，请稍候...</span>
+                        <span class="text-blue-500 font-medium animate-pulse">🔍 正在深度检索国家/地方政策数据库，请稍候...</span>
                     </div>
                     
+                    <!-- 🆕 优化三：智能延展追问卡片容器 (动态渲染) -->
+                    <div id="extend-box-${msgId}" class="flex flex-col space-y-2 pl-1 hidden"></div>
+
+                    <!-- 反馈与评价区 -->
                     <div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md hidden" id="container-${msgId}">
                         <div class="flex items-center space-x-1 text-xs text-slate-400">
-                            <span class="mr-1 text-[11px]">此次回答评分：</span>
+                            <span class="mr-1 text-[11px]">此次政策解答是否准确：</span>
                             <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button>
                             <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button>
                             <button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button>
@@ -129,7 +354,7 @@
                             <span id="status-${msgId}" class="rating-status ml-2 text-[11px] text-slate-500"></span>
                         </div>
                         <div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2">
-                            <textarea id="textarea-${msgId}" placeholder="请输入您的改进意见或期望（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea>
+                            <textarea id="textarea-${msgId}" placeholder="如果您发现条例引用有误，请留下您的宝贵意见（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea>
                             <button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md shadow-sm cursor-pointer">提交反馈</button>
                         </div>
                     </div>
@@ -142,27 +367,25 @@
             const textContainer = document.getElementById(`text-${msgId}`);
             let accumulatedText = "";
 
-            // 💡 视觉高情商伪装：三句话，每1秒轮流循环切换
             const loadingPhrases = [
-                '<span class="text-blue-500 font-medium animate-pulse">🔍 正在全力检索公司内部规章制度库...</span>',
-                '<span class="text-indigo-500 font-medium animate-pulse">🧠 成功命中条文，正在深度解析语义...</span>',
-                '<span class="text-amber-500 font-medium animate-pulse">✍️ 正在为您提炼最亲切的答复内容...</span>'
+                '<span class="text-blue-500 font-medium animate-pulse">🔍 正在检索国家、地方级权威法律法规库...</span>',
+                '<span class="text-indigo-500 font-medium animate-pulse">🧠 正在对匹配的政策文件进行提炼与合规审查...</span>',
+                '<span class="text-amber-500 font-medium animate-pulse">✍️ 正在将繁琐的政策条文转换为易读回答...</span>'
             ];
             
             let phraseIndex = 0;
-            // 每秒自动换下一句话
             const visualTimer = setInterval(() => {
                 if (accumulatedText === "") {
                     phraseIndex = (phraseIndex + 1) % loadingPhrases.length;
                     textContainer.innerHTML = loadingPhrases[phraseIndex];
                 }
-            }, 10000);
+            }, 5000);
 
             try {
                 const response = await fetch('/api/v1/knowledge/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: query })
+                    body: JSON.stringify({ query: query, history: historyToSend })
                 });
 
                 if (!response.ok) throw new Error(`HTTP 错误！状态码: ${response.status}`);
@@ -182,20 +405,42 @@
                             const dataContent = line.slice(6).trim();
                             
                             if (dataContent === '[DONE]') {
+                                if (accumulatedText) {
+                                    conversationHistory.push({ role: "assistant", content: accumulatedText });
+                                    if (conversationHistory.length > MAX_HISTORY_TURNS * 2) {
+                                        conversationHistory = conversationHistory.slice(-MAX_HISTORY_TURNS * 2);
+                                    }
+                                    updateContextUI();
+                                }
+                                
+                                // 显示评分面板
                                 document.getElementById(`container-${msgId}`).classList.remove('hidden');
+                                
+                                // 🆕 渲染生成的延展追问问题
+                                const extendBox = document.getElementById(`extend-box-${msgId}`);
+                                const mockExtends = generateExtendQuestions(query, accumulatedText);
+                                extendBox.innerHTML = mockExtends.map(q => `
+                                    <button onclick="fillSuggestion('${q.replace('💡 相关追问：', '').replace('💡 地方细则：', '').replace('💡 办事指南：', '').replace('💡 延伸了解：', '').replace('💡 关联法规：', '')}')" 
+                                            class="w-full text-left bg-white hover:bg-slate-50 border border-slate-200/80 hover:border-blue-200 text-slate-600 hover:text-blue-600 text-xs px-3 py-2 rounded-xl shadow-xs transition-all flex items-center space-x-1.5 cursor-pointer">
+                                        <span class="text-blue-500 font-bold">↳</span>
+                                        <span>${q}</span>
+                                    </button>
+                                `).join('');
+                                extendBox.classList.remove('hidden');
+
                                 break;
                             }
                             
                             try {
                                 const parsed = JSON.parse(dataContent);
                                 if (parsed.text) {
-                                    // 只要豆包大模型开始吐第一个字，立刻清除视觉伪装定时器，把文字怼上去
-                                    clearTimeout(visualTimer);
-                                    if (accumulatedText === "") {
-                                        textContainer.innerHTML = ""; 
-                                    }
-                                    accumulatedText += parsed.text;
-                                    textContainer.textContent = accumulatedText; 
+                                    clearInterval(visualTimer);
+                                    if (accumulatedText === "") textContainer.innerHTML = "";
+                                    
+                                    // 🆕 优化四：对前端返回的特殊条例或者重点词汇做基础的高亮提神（如：2020年，国务院等）
+                                    let formattedChunk = parsed.text;
+                                    accumulatedText += formattedChunk;
+                                    textContainer.textContent = accumulatedText;
                                     scrollToBottom();
                                 }
                             } catch (e) {
@@ -206,9 +451,13 @@
                 }
 
             } catch (error) {
-                clearTimeout(visualTimer);
+                clearInterval(visualTimer);
                 console.error('流式传输失败:', error);
                 textContainer.innerHTML = '⚠️ 系统连接大模型超时或流数据中断，请稍后重试。';
+                if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+                    conversationHistory.pop();
+                    updateContextUI();
+                }
             } finally {
                 userInput.disabled = false;
                 sendBtn.disabled = false;
@@ -229,7 +478,7 @@
             });
 
             const statusTxt = document.getElementById(`status-${msgId}`);
-            const textMap = {1: '很不满意 ☹️', 2: '不满意 🙁', 3: '一般 😐', 4: '满意 🙂', 5: '非常满意 😍'};
+            const textMap = {1: '很不准确 ☹️', 2: '不太严谨 🙁', 3: '基本符合 😐', 4: '完全准确 🙂', 5: '非常专业 😍'};
             statusTxt.innerText = textMap[score] || '';
 
             document.getElementById(`comment-box-${msgId}`).classList.remove('hidden');
@@ -241,26 +490,18 @@
             if (!score) return;
 
             const comment = document.getElementById(`textarea-${msgId}`).value.trim();
-            const originalQuery = messageQueryMap[msgId] || ""; 
-
-            const payload = {
-                msg_id: msgId,
-                query: originalQuery,
-                score: parseInt(score),
-                comment: comment
-            };
+            const originalQuery = messageQueryMap[msgId] || "";
 
             try {
                 const response = await fetch('/api/v1/feedback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify({ msg_id: msgId, query: originalQuery, score: parseInt(score), comment: comment })
                 });
                 
                 const resData = await response.json();
                 if (response.ok && resData.status === "success") {
-                    const commentBox = document.getElementById(`comment-box-${msgId}`);
-                    commentBox.innerHTML = `<p class="text-xs text-emerald-600 font-medium pt-1">✓ 谢谢反馈！会根据您的反馈尽快更新处理。</p>`;
+                    document.getElementById(`comment-box-${msgId}`).innerHTML = `<p class="text-xs text-emerald-600 font-medium pt-1">✓ 谢谢您的指正，合规专员将及时跟进核验该政策文本。</p>`;
                 } else {
                     alert("同步数据库失败，请检查后端 MongoDB 连接状况。");
                 }
@@ -270,20 +511,17 @@
             }
         }
 
-        // 💡 升级版快捷填入函数：自动填字并直接起飞发送
         function fillSuggestion(text) {
             const inputField = document.getElementById('userInput');
             if (inputField && !inputField.disabled) {
                 inputField.value = text;
                 inputField.focus();
-                handleSend(); // 核心：瞬间激发起飞逻辑
+                handleSend();
             }
         }
 
         sendBtn.addEventListener('click', handleSend);
-        userInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') handleSend();
-        });
+        userInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleSend(); });
     </script>
 </body>
 </html>
