@@ -26,3 +26,15 @@ class MongoUserModel(BaseModel):
     password_hash: str = Field(..., description="加密后的密码哈希值")
     role: str = Field(default="employee", description="角色权限: hr / employee")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="注册时间")
+
+
+class SearchLogModel(BaseModel):
+    query: str = Field(..., description="用户的搜索问题")
+    response_length: int = Field(default=0, description="AI 回复字数（不保存原文，太长无意义）")
+    source: str = Field(default="volc_knowledge_base", description="知识库来源")
+    model: str = Field(default="", description="使用的模型名称")
+    response_time_ms: int = Field(default=0, description="响应耗时（毫秒）")
+    user_ip: str | None = Field(default=None, description="用户 IP 地址")
+    status: str = Field(default="success", description="请求状态: success / error")
+    error_message: str | None = Field(default=None, description="错误信息")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="搜索时间")
