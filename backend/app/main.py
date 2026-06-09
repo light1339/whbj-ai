@@ -1,18 +1,19 @@
 import os
-from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import Depends
-import bcrypt
-from datetime import datetime
+from datetime import datetime, timedelta
 import sentry_sdk
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.routing import APIRoute
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.security import OAuth2PasswordRequestForm
 from starlette.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from motor.motor_asyncio import AsyncIOMotorClient
-# 🚀 把它修改成这样，把模型和需要的集合全部从 core.db 拿过来
-from .core.mdb import client, feedback_collection, users_collection, search_logs_collection, FeedbackModel,MongoUserModel
+import bcrypt
+
+from app.core.mdb import (
+    client, feedback_collection, users_collection, tokens_collection,
+    FeedbackModel, MongoUserModel, TokenModel,
+)
+from app.core.auth import create_jwt_token, get_current_user, require_user
 from app.api.main import api_router
 from app.core.config import settings
 
@@ -33,18 +34,17 @@ app = FastAPI(
 )
 
 
-# --- 🔍 新增：启动时强制检查 MongoDB 连接是否真的通了 ---
+# --- 启动检查 MongoDB ---
 @app.on_event("startup")
 async def server_on_start():
     try:
-        # 发送一个 ping 命令测试连接
         await client.admin.command('ping')
-        print("====== 🎉 成功连接到本地 MongoDB 数据库！ ======")
+        print("====== ✅ 成功连接到本地 MongoDB 数据库！ ======")
     except Exception as e:
         print(f"====== ❌ MongoDB 连接失败！请检查服务是否开启。错误: {e} ======")
 
 
-# --- ⚙️ 初始化模板引擎 ---
+# --- 模板引擎 ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -60,70 +60,96 @@ if settings.all_cors_origins:
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# --- 📬 3. 接收前端反馈并写入 MongoDB 的接口 ---
+# =====================================================================
+# 📬 反馈接口 —— 已登录用户自动带 user_id
+# =====================================================================
+
 @app.post("/api/v1/feedback")
-async def save_feedback(feedback: FeedbackModel):
+async def save_feedback(feedback: FeedbackModel, current_user: dict | None = Depends(get_current_user)):
     try:
-        # 1. 将 Pydantic 模型转为原生 Python 字典
-        # 使用你 main.py 里的 model_dump() 
         feedback_dict = feedback.model_dump()
-        
-        # 2. 在这里单独追加服务器标准时间戳，存入 MongoDB，完美避开 Pydantic 校验冲突
         feedback_dict["created_at"] = datetime.now()
-        
-        # 3. 异步插入到 MongoDB 数据库中
+        if current_user:
+            feedback_dict["user_id"] = current_user["user_id"]
+
         result = await feedback_collection.insert_one(feedback_dict)
-        
         if result.inserted_id:
-            print(f"📊 [MongoDB 成功写入] 收到新反馈！ID: {feedback.msg_id}，分数: {feedback.score}")
+            user_tag = f"用户: {current_user['username']} | " if current_user else ""
+            print(f"📊 [反馈] {user_tag}ID: {feedback.msg_id} 分数: {feedback.score}")
             return {"status": "success", "message": "反馈已成功同步至本地数据库"}
-            
+
         raise HTTPException(status_code=500, detail="数据未能成功写入")
     except Exception as e:
-        print(f"❌ [MongoDB 写入异常]: {str(e)}")
+        print(f"❌ [反馈写入异常]: {str(e)}")
         raise HTTPException(status_code=500, detail=f"MongoDB 写入异常: {str(e)}")
 
 
-# --- 🎨 根路径路由返回聊天页面 ---
+# =====================================================================
+# 🎨 页面路由
+# =====================================================================
+
 @app.get("/", response_class=HTMLResponse)
 async def get_chat_page(request: Request):
     return templates.TemplateResponse("chat.html", {"request": request})
 
-# =====================================================================
-# backend/app/main.py 追加页面跳转与标准登录路由
-# =====================================================================
-from fastapi import Depends
-from fastapi.security import OAuth2PasswordRequestForm
-import bcrypt
 
-# 1. 🎨 路由：访问 /login 返回登录页面
 @app.get("/login", response_class=HTMLResponse)
 async def get_login_page(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 
-# 2. 🔐 API：标准的 JWT 登录认证接口 (供前端表单异步调用)
+# =====================================================================
+# 🔓 退出登录 —— 删除 token
+# =====================================================================
+
+@app.post("/api/v1/logout")
+async def logout(current_user: dict | None = Depends(get_current_user)):
+    if current_user:
+        await tokens_collection.delete_many({"user_id": current_user["user_id"]})
+    return {"status": "success", "message": "已退出"}
+
+
+# =====================================================================
+# 🔐 登录接口 —— JWT + token 表
+# =====================================================================
+
 @app.post("/api/v1/login/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    # 🔍 去 MongoDB 查用户名是否存在
     user = await users_collection.find_one({"username": form_data.username})
     if not user:
         raise HTTPException(status_code=400, detail="用户名或密码错误")
-    
-    # 🔍 校验密码（利用原生 bcrypt 的 checkpw 验证明文和哈希密文）
+
     password_bytes = form_data.password.encode('utf-8')
     hashed_bytes = user["password_hash"].encode('utf-8')
-    
     if not bcrypt.checkpw(password_bytes, hashed_bytes):
         raise HTTPException(status_code=400, detail="用户名或密码错误")
-    
-    # 🎟️ 验证成功！返回标准的 Token 数据结构
-    # （这里暂用 mock 令牌，后续加解密算法直接替换字符串即可，不影响前后端联调）
+
+    user_id = user.get("user_id")
+    # 兼容旧数据：老用户可能没有 user_id，自动补上
+    if not user_id:
+        import uuid
+        user_id = str(uuid.uuid4())
+        await users_collection.update_one(
+            {"_id": user["_id"]}, {"$set": {"user_id": user_id}}
+        )
+
+    # 生成 JWT
+    access_token = create_jwt_token(user_id, user["username"])
+
+    # 写入 tokens 表
+    token_doc = TokenModel(
+        user_id=user_id,
+        access_token=access_token,
+        expires_at=datetime.utcnow() + timedelta(days=7),
+    )
+    await tokens_collection.insert_one(token_doc.model_dump())
+
     return {
-        "access_token": f"mock_token_for_{user['username']}",
+        "access_token": access_token,
         "token_type": "bearer",
-        "user_info": {                    # 👈 补上前端期待的嵌套结构
+        "user_info": {
+            "user_id": user_id,
             "username": user["username"],
-            "role": user.get("role", "employee")
-        }
+            "role": user.get("role", "employee"),
+        },
     }
