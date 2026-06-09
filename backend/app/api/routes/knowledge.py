@@ -21,6 +21,7 @@ async def chat_with_knowledge_base(request: Request, current_user: dict | None =
     try:
         body = await request.json()
         user_query = body.get("query", "").strip()
+        deep_think = body.get("deep_think", False)
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
@@ -35,7 +36,7 @@ async def chat_with_knowledge_base(request: Request, current_user: dict | None =
     async def event_generator():
         nonlocal full_response, search_status, error_detail
         try:
-            for text_chunk in knowledge_service_chat_stream(user_query):
+            for text_chunk in knowledge_service_chat_stream(user_query, deep_think):
                 full_response += text_chunk
                 yield f"data: {json.dumps({'text': text_chunk})}\n\n"
                 await asyncio.sleep(0.001)
