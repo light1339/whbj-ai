@@ -2,21 +2,22 @@ import json
 import asyncio
 import time
 import os
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from app.core.volc_engine_retriever import knowledge_service_chat_stream
 from app.core.mdb import search_logs_collection, SearchLogModel
+from app.core.auth import get_current_user
 
 router = APIRouter()
 
 
 # ──────────────────────────────────────────────
-# POST /chat — 纯 SSE 流式回答（不生成追问，不查日志）
+# POST /chat — SSE 流式回答 + 搜索日志（可选认证）
 # ──────────────────────────────────────────────
 
 @router.post("/chat")
-async def chat_with_knowledge_base(request: Request):
+async def chat_with_knowledge_base(request: Request, current_user: dict | None = Depends(get_current_user)):
     try:
         body = await request.json()
         user_query = body.get("query", "").strip()
@@ -48,7 +49,6 @@ async def chat_with_knowledge_base(request: Request):
 
     response = StreamingResponse(event_generator(), media_type="text/event-stream")
 
-    # 后台异步保存搜索日志
     async def _save_log():
         await asyncio.sleep(0.5)
         try:
@@ -56,6 +56,7 @@ async def chat_with_knowledge_base(request: Request):
             client_ip = request.client.host if request.client else None
             log_entry = SearchLogModel(
                 query=user_query,
+                user_id=current_user["user_id"] if current_user else None,
                 response_length=len(full_response),
                 source="volc_knowledge_base",
                 model=os.getenv("VOLC_ARK_MODEL", ""),
@@ -65,7 +66,8 @@ async def chat_with_knowledge_base(request: Request):
                 error_message=error_detail,
             )
             await search_logs_collection.insert_one(log_entry.model_dump())
-            print(f"📝 [搜索日志] {user_query[:30]}... | {len(full_response)}字 | {elapsed_ms}ms")
+            user_tag = f"用户: {current_user['username']} | " if current_user else ""
+            print(f"📝 [搜索日志] {user_tag}{user_query[:30]}... | {len(full_response)}字 | {elapsed_ms}ms")
         except Exception as e:
             print(f"⚠️ [日志保存失败]: {e}")
 
@@ -74,12 +76,11 @@ async def chat_with_knowledge_base(request: Request):
 
 
 # ──────────────────────────────────────────────
-# POST /chat/extend — 独立追问接口（回答完成后前端异步请求）
+# POST /chat/extend — 追问生成（可选认证）
 # ──────────────────────────────────────────────
 
 @router.post("/chat/extend")
-async def get_extend_questions(request: Request):
-    """根据用户问题和 AI 回答，用 LLM 生成 2-3 条追问"""
+async def get_extend_questions(request: Request, current_user: dict | None = Depends(get_current_user)):
     try:
         body = await request.json()
         query = body.get("query", "").strip()

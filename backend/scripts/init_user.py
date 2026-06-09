@@ -10,6 +10,7 @@ backend_dir = os.path.dirname(current_dir)
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+import uuid
 import bcrypt
 from datetime import datetime
 from app.core.mdb import users_collection # 确保路径正确
@@ -19,7 +20,7 @@ async def create_user(username, password, role="employee"):
         # 🔍 查重
         existing_user = await users_collection.find_one({"username": username})
         if existing_user:
-            print(f"💡 提示：用户 {username} 已存在，跳过创建。")
+            print(f"[提示] 用户 {username} 已存在，跳过创建。")
             return
 
         # 🔐 加密
@@ -27,18 +28,19 @@ async def create_user(username, password, role="employee"):
         hashed_password = bcrypt.hashpw(password_bytes, bcrypt.gensalt()).decode('utf-8')
         
         user_data = {
+            "user_id": str(uuid.uuid4()),
             "username": username,
-            "email": f"{username}@example.com", # 自动生成一个邮箱
+            "email": f"{username}@example.com",
             "password_hash": hashed_password,
             "role": role,
-            "created_at": datetime.utcnow() 
+            "created_at": datetime.utcnow()
         }
         
         await users_collection.insert_one(user_data)
-        print(f"🎉 成功！用户 [{username}] (角色: {role}) 已入库！")
+        print(f"[成功] 用户 [{username}] (角色: {role}) 已入库！")
         
     except Exception as e:
-        print(f"❌ 失败: {str(e)}")
+        print(f"[失败] {str(e)}")
 
 if __name__ == "__main__":
     # 配置命令行参数
