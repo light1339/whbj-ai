@@ -173,16 +173,27 @@ def _get_raw_knowledge_context(query: str) -> str:
 #         return raw_context
 
 
-def knowledge_service_chat_stream(query: str):
+def knowledge_service_chat_stream(query: str, deep_think: bool = False):
     """
-    🔥 新增对外主入口：知识库纯检索 + 豆包大模型流式打字机输出 (RAG 流式完整体)
+    RAG 流式打字机输出
+
+    deep_think=False: 只做知识库检索，直接返回原文（快）
+    deep_think=True:  检索 + 豆包 LLM 语义加工润色（慢但更专业）
     """
     # 1. 召回原始知识库干货
     raw_context = _get_raw_knowledge_context(query)
-    
+
     if not raw_context or "未获取到有效回答" in raw_context:
         raw_context = "（暂无相关内容参考）"
 
+    # ── 不深度思考：直接流式返回原文 ──
+    if not deep_think:
+        print("[深度思考关闭] 跳过 LLM 加工，直接返回知识库原文")
+        for char in raw_context:
+            yield char
+        return
+
+    # ── 深度思考模式：LLM 语义加工 ──
     llm_api_key = volc_ark_api_key or apikey
     llm_base_url = volc_ark_base_url
     
