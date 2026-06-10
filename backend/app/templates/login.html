@@ -114,6 +114,7 @@
                 localStorage.setItem('token', data.access_token);
                 localStorage.setItem('username', data.user_info.username);
                 localStorage.setItem('role', data.user_info.role);
+                localStorage.setItem('kb_access', JSON.stringify(data.user_info.kb_access||['default']));
                 
                 // ✈️ 成功后跳转到聊天主页
                 window.location.href = '/';

@@ -12,32 +12,32 @@ import json
 import re
 import requests
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dotenv import load_dotenv
 from volcengine.base.Request import Request
 from openai import OpenAI
 
-# 加载环境变量（自动查找 .env 文件）
 load_dotenv()
-# 临时调试，确认后可删除
-print(f"[DEBUG] 当前使用知识库ID: {os.getenv('VOLC_KNOWLEDGE_SERVICE_ID')}")
-print(f"[DEBUG] 当前使用API Key前8位: {str(os.getenv('VOLC_KNOWLEDGE_API_KEY'))[:8]}")
-# 火山引擎配置
+
 g_knowledge_base_domain = "api-knowledgebase.mlp.cn-beijing.volces.com"
 
-# 从环境变量动态读取
 apikey = os.getenv("VOLC_KNOWLEDGE_API_KEY")
-service_resource_id = os.getenv("VOLC_KNOWLEDGE_SERVICE_ID")
 
-# 大模型相关配置
+KB_POOL = {
+    "default": os.getenv("VOLC_KNOWLEDGE_SERVICE_ID", ""),
+    "manage":  os.getenv("VOLC_KNOWLEDGE_SERVICE_ID_2", ""),
+}
+
 volc_ark_api_key = os.getenv("VOLC_ARK_API_KEY")
 volc_ark_base_url = os.getenv("VOLC_ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
-volc_ark_model = os.getenv("VOLC_ARK_MODEL")  # 使用你 env 里配的接入点名称（通常是 ep-xxx 形式的推理接入点）
+volc_ark_model = os.getenv("VOLC_ARK_MODEL")
 
-# 强制校验：如果环境变量未设置，立即报错
 if not apikey:
-    raise ValueError("错误：未设置环境变量 VOLC_KNOWLEDGE_API_KEY，请在 .env 文件中配置")
-if not service_resource_id:
-    raise ValueError("错误：未设置环境变量 VOLC_KNOWLEDGE_SERVICE_ID，请在 .env 文件中配置")
+    raise ValueError("未设置 VOLC_KNOWLEDGE_API_KEY")
+if not KB_POOL["default"]:
+    raise ValueError("未设置 VOLC_KNOWLEDGE_SERVICE_ID")
+
+print(f"[DEBUG] KB池: default={KB_POOL['default'][:20]}... | manage={'OK' if KB_POOL['manage'] else '未配置'}")
 
 
 def prepare_request(method, path, params=None, data=None, doseq=0):
@@ -77,17 +77,14 @@ def prepare_request(method, path, params=None, data=None, doseq=0):
     return r
 
 
-def _get_raw_knowledge_context(query: str) -> str:
-    """
-    内部核心函数：仅负责去火山引擎知识库捞取最相关的原始文档干货
-    """
+def _get_raw_knowledge_context(query: str, kb_id: str) -> str:
     method = "POST"
     path = "/api/knowledge/service/chat"
-    
+
     prompt = f"请提取出与用户问题相关的、完整的文档内容。用户问题：{query}"
-    
+
     request_params = {
-        "service_resource_id": service_resource_id,
+        "service_resource_id": kb_id,
         "messages": [
             {"role": "system", "content": "你是一个严谨的文档检索助手，只负责完整提取相关的原文条文。"},
             {"role": "user", "content": prompt}
@@ -173,22 +170,50 @@ def _get_raw_knowledge_context(query: str) -> str:
 #         return raw_context
 
 
-def knowledge_service_chat_stream(query: str, deep_think: bool = False):
+def _get_multi_kb_context(query: str, kb_ids: list[str]) -> str:
+    """并发检索多个知识库，合并结果"""
+    if len(kb_ids) == 1:
+        return _get_raw_knowledge_context(query, kb_ids[0])
+
+    results: dict[str, str] = {}
+    with ThreadPoolExecutor(max_workers=len(kb_ids)) as pool:
+        futures = {pool.submit(_get_raw_knowledge_context, query, kid): kid for kid in kb_ids}
+        for f in as_completed(futures):
+            kid = futures[f]
+            try:
+                results[kid] = f.result()
+            except Exception as e:
+                print(f"[KB检索失败] {kid}: {e}")
+
+    parts = []
+    for kid in kb_ids:
+        if kid in results and results[kid]:
+            label = "管理库" if kid == KB_POOL.get("manage") else "默认库"
+            parts.append(f"【{label}】\n{results[kid]}")
+    return "\n\n---\n\n".join(parts) if parts else ""
+
+
+def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: list[str] | None = None):
     """
     RAG 流式打字机输出
 
-    deep_think=False: 只做知识库检索，直接返回原文（快）
-    deep_think=True:  检索 + 豆包 LLM 语义加工润色（慢但更专业）
+    deep_think=False: 只做检索直接返回原文（快）
+    deep_think=True:  检索 + 豆包 LLM 润色（慢但更专业）
+    kb_ids:            要检索的知识库 ID 列表，默认只查 default
     """
-    # 1. 召回原始知识库干货
-    raw_context = _get_raw_knowledge_context(query)
+    if kb_ids is None:
+        kb_ids = [KB_POOL["default"]]
+
+    kb_ids = [k for k in kb_ids if k]  # 过滤空值
+    print(f"[检索] 查询 {len(kb_ids)} 个库: {[k[:25]+'...' for k in kb_ids]}")
+
+    raw_context = _get_multi_kb_context(query, kb_ids)
 
     if not raw_context or "未获取到有效回答" in raw_context:
         raw_context = "（暂无相关内容参考）"
 
-    # ── 不深度思考：直接流式返回原文 ──
     if not deep_think:
-        print("[深度思考关闭] 跳过 LLM 加工，直接返回知识库原文")
+        print("[深度思考关闭] 跳过 LLM 加工，直接返回原文")
         for char in raw_context:
             yield char
         return

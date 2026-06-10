@@ -151,5 +151,6 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             "user_id": user_id,
             "username": user["username"],
             "role": user.get("role", "employee"),
+            "kb_access": user.get("kb_access", ["default"]),
         },
     }
