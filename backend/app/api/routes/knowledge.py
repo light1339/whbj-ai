@@ -5,7 +5,7 @@ import os
 from fastapi import APIRouter, Request, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from openai import OpenAI
-from app.core.volc_engine_retriever import knowledge_service_chat_stream
+from app.core.volc_engine_retriever import knowledge_service_chat_stream, KB_POOL
 from app.core.mdb import search_logs_collection, SearchLogModel
 from app.core.auth import get_current_user
 
@@ -36,7 +36,16 @@ async def chat_with_knowledge_base(request: Request, current_user: dict | None =
     async def event_generator():
         nonlocal full_response, search_status, error_detail
         try:
-            for text_chunk in knowledge_service_chat_stream(user_query, deep_think):
+            kb_ids = []
+            if current_user:
+                for label in current_user.get("kb_access", ["default"]):
+                    kid = KB_POOL.get(label)
+                    if kid:
+                        kb_ids.append(kid)
+            if not kb_ids:
+                kb_ids = [KB_POOL["default"]]
+
+            for text_chunk in knowledge_service_chat_stream(user_query, deep_think, kb_ids):
                 full_response += text_chunk
                 yield f"data: {json.dumps({'text': text_chunk})}\n\n"
                 await asyncio.sleep(0.001)

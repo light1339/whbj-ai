@@ -59,6 +59,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict | None:
         "user_id": user["user_id"],
         "username": user["username"],
         "role": user.get("role", "employee"),
+        "kb_access": user.get("kb_access", ["default"]),
     }
 
 

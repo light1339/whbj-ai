@@ -15,7 +15,7 @@ import bcrypt
 from datetime import datetime
 from app.core.mdb import users_collection # 确保路径正确
 
-async def create_user(username, password, role="employee"):
+async def create_user(username, password, role="employee", kb_list=None):
     try:
         # 🔍 查重
         existing_user = await users_collection.find_one({"username": username})
@@ -33,6 +33,7 @@ async def create_user(username, password, role="employee"):
             "email": f"{username}@example.com",
             "password_hash": hashed_password,
             "role": role,
+            "kb_access": kb_list or ["default"],
             "created_at": datetime.utcnow()
         }
         
@@ -47,7 +48,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="快速添加用户工具")
     parser.add_argument("--user", required=True, help="用户名")
     parser.add_argument("--pwd", required=True, help="明文密码")
-    parser.add_argument("--role", default="employee", help="角色 (hr/employee)")
-    
+    parser.add_argument("--role", default="employee", help="角色 (employee/hr/boss)")
+    parser.add_argument("--kb", default="default", help="可访问知识库: default,manage 或 default,manage(逗号分隔)")
+
     args = parser.parse_args()
-    asyncio.run(create_user(args.user, args.pwd, args.role))
+    kb_list = [k.strip() for k in args.kb.split(",") if k.strip()]
+    asyncio.run(create_user(args.user, args.pwd, args.role, kb_list))

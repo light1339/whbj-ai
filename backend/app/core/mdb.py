@@ -22,7 +22,8 @@ class MongoUserModel(BaseModel):
     user_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="用户唯一 ID")
     username: str = Field(..., description="登录用户名")
     password_hash: str = Field(..., description="加密后的密码哈希值")
-    role: str = Field(default="employee", description="角色权限: hr / employee")
+    role: str = Field(default="employee", description="角色权限: employee / hr / boss")
+    kb_access: list[str] = Field(default=["default"], description="可访问的知识库: default, manage")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="注册时间")
 
 
