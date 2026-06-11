@@ -12,7 +12,9 @@ import json
 import re
 import requests
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import concurrent.futures
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 from volcengine.base.Request import Request
 from openai import OpenAI
@@ -125,15 +127,29 @@ def _get_raw_knowledge_context(query: str, kb_id: str) -> str:
         
     return ""
 
-def _get_multi_kb_context(query: str, kb_ids: list[str]) -> str:
-    """并发检索多个知识库，合并结果"""
+def _get_multi_kb_context(query: str, kb_ids: list[str]) -> tuple[str, bool]:
+    """并发检索多个知识库，合并结果。返回 (内容, 是否超时)"""
     if len(kb_ids) == 1:
-        return _get_raw_knowledge_context(query, kb_ids[0])
+        return _get_raw_knowledge_context(query, kb_ids[0]), False
 
     results: dict[str, str] = {}
+    SEARCH_TIMEOUT = 60  # 总搜索超时 1 分钟    
+    timed_out = False
+    
     with ThreadPoolExecutor(max_workers=len(kb_ids)) as pool:
         futures = {pool.submit(_get_raw_knowledge_context, query, kid): kid for kid in kb_ids}
-        for f in as_completed(futures):
+        done, not_done = concurrent.futures.wait(
+            futures, timeout=SEARCH_TIMEOUT,
+            return_when=concurrent.futures.ALL_COMPLETED
+        )
+        
+        if not_done:
+            timed_out = True
+            print(f"[搜索超时] {len(not_done)}/{len(futures)} 个库超过 {SEARCH_TIMEOUT}s 未完成，返回已检索结果")
+            for f in not_done:
+                f.cancel()
+        
+        for f in done:
             kid = futures[f]
             try:
                 results[kid] = f.result()
@@ -145,7 +161,22 @@ def _get_multi_kb_context(query: str, kb_ids: list[str]) -> str:
         if kid in results and results[kid]:
             label = "管理库" if kid == KB_POOL.get("manage") else "默认库"
             parts.append(f"【{label}】\n{results[kid]}")
-    return "\n\n---\n\n".join(parts) if parts else ""
+    return ("\n\n---\n\n".join(parts) if parts else ""), timed_out
+
+
+def _is_broad_query(query: str) -> str | None:
+    """检测提问是否过于宽泛。返回 None 表示不宽泛，返回引导提示语表示需要细化"""
+    stripped = query.strip().rstrip("?？。. ")
+    if len(stripped) <= 12:
+        return (
+            f"您好，您的问题「{query}」比较简短，可能涉及面很广。\n\n"
+            "为了给您更精准、更有价值的回答，能否补充一下：\n"
+            "• 您具体想了解哪条政策或制度？\n"
+            "• 是和哪个业务场景、部门或岗位相关？\n"
+            "• 有没有特定的时间范围或关键词？\n\n"
+            "请提供更多细节，我会为您详细解答。"
+        )
+    return None
 
 
 def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: list[str] | None = None):
@@ -156,13 +187,26 @@ def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: 
     deep_think=True:  检索 + 豆包 LLM 润色（慢但更专业）
     kb_ids:            要检索的知识库 ID 列表，默认只查 default
     """
+    # ── 宽泛提问前置拦截 ──
+    clarify_msg = _is_broad_query(query)
+    if clarify_msg:
+        yield clarify_msg
+        return
+
     if kb_ids is None:
         kb_ids = [KB_POOL["default"]]
 
     kb_ids = [k for k in kb_ids if k]  # 过滤空值
     print(f"[检索] 查询 {len(kb_ids)} 个库: {[k[:25]+'...' for k in kb_ids]}")
 
-    raw_context = _get_multi_kb_context(query, kb_ids)
+    raw_context, timed_out = _get_multi_kb_context(query, kb_ids)
+
+    # 搜索超时时，追加引导提示让用户细化
+    if timed_out and raw_context:
+        raw_context += (
+            "\n\n⚠️ 搜索时间较长，以上为已检索到的部分内容。"
+            "\n💡 建议您缩小问题范围或补充更具体的关键词，以获得更完整的答案。"
+        )
 
     if not raw_context or "未获取到有效回答" in raw_context:
         raw_context = "（暂无相关内容参考）"
