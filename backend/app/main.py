@@ -39,7 +39,7 @@ app = FastAPI(
 async def server_on_start():
     try:
         await client.admin.command('ping')
-        print("====== ✅ 成功连接到本地 MongoDB 数据库！ ======")
+        print("====== ✅ 成功连接到 MongoDB Atlas 云数据库！ ======")
     except Exception as e:
         print(f"====== ❌ MongoDB 连接失败！请检查服务是否开启。错误: {e} ======")
 

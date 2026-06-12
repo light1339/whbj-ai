@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 # 1. 🔌 统一连接本地 MongoDB
-MONGO_DETAILS = "mongodb://127.0.0.1:27017"
+MONGO_DETAILS = MONGO_DETAILS = "mongodb+srv://guanghui133925_db_user:qOROl5JEjagcds63@cluster0.atjyqa7.mongodb.net/?appName=Cluster0"
 client = AsyncIOMotorClient(MONGO_DETAILS)
 db = client["hr_assistant_db"]
 
