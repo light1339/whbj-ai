@@ -107,13 +107,7 @@ def _get_raw_knowledge_context(query: str, kb_id: str) -> str:
         rsp.encoding = "utf-8"
         result = rsp.json()
         
-        if "data" in result and "generated_answer" in result["data"]:
-            answer = result["data"]["generated_answer"]
-            answer = re.sub(r'<reference\s+data-ref="[^"]+">.*?</reference>', '', answer, flags=re.DOTALL)
-            answer = re.sub(r'<illustration.*?>.*?</illustration>', '', answer, flags=re.DOTALL)
-            return answer.strip()
-            
-        elif "data" in result and "result" in result["data"]:
+        if "data" in result and "result" in result["data"]:
             chunks = []
             for chunk in result["data"]["result"]:
                 content = chunk.get('content', '')
@@ -121,7 +115,18 @@ def _get_raw_knowledge_context(query: str, kb_id: str) -> str:
                 content = re.sub(r'<illustration.*?>.*?</illustration>', '', content, flags=re.DOTALL)
                 if content:
                     chunks.append(content)
-            return "\n".join(chunks)
+            if chunks:
+                return "\n".join(chunks)
+
+        if "data" in result and "generated_answer" in result["data"]:
+            answer = result["data"]["generated_answer"]
+            answer = re.sub(r'<reference\s+data-ref="[^"]+">.*?</reference>', '', answer, flags=re.DOTALL)
+            answer = re.sub(r'<illustration.*?>.*?</illustration>', '', answer, flags=re.DOTALL)
+            answer = answer.strip()
+            low_confidence_phrases = ["抱歉", "无法回答", "未查到", "暂无", "请您提供更加详细的信息"]
+            if any(phrase in answer for phrase in low_confidence_phrases):
+                return ""
+            return answer
     except Exception as e:
         print(f"[Warning] 知识库原生检索阶段发生异常: {str(e)}")
         
@@ -164,19 +169,31 @@ def _get_multi_kb_context(query: str, kb_ids: list[str]) -> tuple[str, bool]:
     return ("\n\n---\n\n".join(parts) if parts else ""), timed_out
 
 
-def _is_broad_query(query: str) -> str | None:
-    """检测提问是否过于宽泛。返回 None 表示不宽泛，返回引导提示语表示需要细化"""
-    stripped = query.strip().rstrip("?？。. ")
-    if len(stripped) <= 12:
-        return (
-            f"您好，您的问题「{query}」比较简短，可能涉及面很广。\n\n"
-            "为了给您更精准、更有价值的回答，能否补充一下：\n"
-            "• 您具体想了解哪条政策或制度？\n"
-            "• 是和哪个业务场景、部门或岗位相关？\n"
-            "• 有没有特定的时间范围或关键词？\n\n"
-            "请提供更多细节，我会为您详细解答。"
-        )
-    return None
+def _web_search_content(query: str, max_results: int = 5) -> tuple[str, list[str]]:
+    """
+    联网搜索（DuckDuckGo），返回 (拼接后的文本, 来源URL列表)
+    """
+    try:
+        from ddgs import DDGS
+        results = DDGS().text(query, max_results=max_results)
+        if not results:
+            return "", []
+
+        sources = []
+        chunks = []
+        for i, r in enumerate(results, 1):
+            href = r.get("href", "")
+            title = r.get("title", "")
+            body = r.get("body", "")
+            if body:
+                sources.append(href)
+                chunks.append(f"[{i}] {title}\n{body}\n来源: {href}")
+
+        return "\n\n".join(chunks), sources
+    except Exception as e:
+        print(f"[联网搜索异常]: {e}")
+        return "", []
+
 
 
 def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: list[str] | None = None):
@@ -186,13 +203,9 @@ def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: 
     deep_think=False: 只做检索直接返回原文（快）
     deep_think=True:  检索 + 豆包 LLM 润色（慢但更专业）
     kb_ids:            要检索的知识库 ID 列表，默认只查 default
-    """
-    # ── 宽泛提问前置拦截 ──
-    clarify_msg = _is_broad_query(query)
-    if clarify_msg:
-        yield clarify_msg
-        return
 
+    特殊元数据块 (dict): {"web_search": True, "sources": [...]}
+    """
     if kb_ids is None:
         kb_ids = [KB_POOL["default"]]
 
@@ -200,6 +213,8 @@ def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: 
     print(f"[检索] 查询 {len(kb_ids)} 个库: {[k[:25]+'...' for k in kb_ids]}")
 
     raw_context, timed_out = _get_multi_kb_context(query, kb_ids)
+    web_search_used = False
+    web_sources: list[str] = []
 
     # 搜索超时时，追加引导提示让用户细化
     if timed_out and raw_context:
@@ -208,13 +223,26 @@ def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: 
             "\n💡 建议您缩小问题范围或补充更具体的关键词，以获得更完整的答案。"
         )
 
-    if not raw_context or "未获取到有效回答" in raw_context:
-        raw_context = "（暂无相关内容参考）"
+    # ── 知识库没查到 / 低置信度答复 → 联网搜索兜底 ──
+    low_confidence_phrases = ["未获取到有效回答", "抱歉", "无法回答", "未查到", "暂无相关内容"]
+    if (not raw_context) or any(phrase in raw_context for phrase in low_confidence_phrases):
+        print(f"[联网兜底] 知识库未命中，尝试联网搜索: {query[:40]}...")
+        web_context, web_sources = _web_search_content(query)
+        if web_context:
+            web_search_used = True
+            raw_context = (
+                "⚠️ 知识库中暂未查到相关内容，以下为互联网搜索结果，仅供参考，非官方审核内容：\n\n"
+                + web_context
+            )
+        else:
+            raw_context = "（暂无相关内容参考，联网搜索也未找到）"
 
     if not deep_think:
         print("[深度思考关闭] 跳过 LLM 加工，直接返回原文")
         for char in raw_context:
             yield char
+        if web_search_used:
+            yield {"web_search": True, "sources": web_sources}
         return
 
     # ── 深度思考模式：LLM 语义加工 ──
@@ -264,10 +292,16 @@ def knowledge_service_chat_stream(query: str, deep_think: bool = False, kb_ids: 
             if chunk.choices and chunk.choices[0].delta.content:
                 yield chunk.choices[0].delta.content
 
+        # 联网搜索结果标记
+        if web_search_used:
+            yield {"web_search": True, "sources": web_sources}
+
     except Exception as e:
         print(f"\n⚠️ [大模型流式润色异常]: {str(e)} -> 触发流式兜底。")
         for char in raw_context:
             yield char
+        if web_search_used:
+            yield {"web_search": True, "sources": web_sources}
 
 
 if __name__ == "__main__":

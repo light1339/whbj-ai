@@ -14,6 +14,7 @@ feedback_collection = db["feedbacks"]
 search_logs_collection = db["search_logs"]
 users_collection = db["users"]
 tokens_collection = db["tokens"]              # ← 新增 token 表
+pending_docs_collection = db["pending_docs"]  # ← 联网搜索结果提审入库
 
 
 # 3. 📝 Pydantic 模型
@@ -53,3 +54,16 @@ class SearchLogModel(BaseModel):
     status: str = Field(default="success", description="请求状态: success / error")
     error_message: str | None = Field(default=None, description="错误信息")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="搜索时间")
+
+
+class PendingDocModel(BaseModel):
+    doc_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    original_query: str = Field(..., description="触发联网搜索的原始问题")
+    web_sources: list[str] = Field(default_factory=list, description="联网来源 URLs")
+    web_content: str = Field("", description="联网搜索到的完整内容")
+    submitted_by: str | None = Field(default=None, description="提审人 user_id")
+    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    status: str = Field(default="pending", description="pending | approved | rejected")
+    reviewed_by: str | None = Field(default=None)
+    reviewed_at: datetime | None = None
+    reject_reason: str = Field(default="", description="驳回原因")

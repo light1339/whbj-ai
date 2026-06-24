@@ -45,9 +45,14 @@ async def chat_with_knowledge_base(request: Request, current_user: dict | None =
             if not kb_ids:
                 kb_ids = [KB_POOL["default"]]
 
-            for text_chunk in knowledge_service_chat_stream(user_query, deep_think, kb_ids):
-                full_response += text_chunk
-                yield f"data: {json.dumps({'text': text_chunk})}\n\n"
+            for chunk in knowledge_service_chat_stream(user_query, deep_think, kb_ids):
+                if isinstance(chunk, dict):
+                    # 元数据块（如联网搜索标记），原样转发
+                    full_response += json.dumps(chunk, ensure_ascii=False)
+                    yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+                else:
+                    full_response += chunk
+                    yield f"data: {json.dumps({'text': chunk}, ensure_ascii=False)}\n\n"
                 await asyncio.sleep(0.001)
 
             yield "data: [DONE]\n\n"

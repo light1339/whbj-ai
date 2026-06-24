@@ -11,8 +11,10 @@ import bcrypt
 
 from app.core.mdb import (
     client, feedback_collection, users_collection, tokens_collection,
-    FeedbackModel, MongoUserModel, TokenModel,
+    pending_docs_collection,
+    FeedbackModel, MongoUserModel, TokenModel, PendingDocModel,
 )
+from pydantic import BaseModel, Field
 from app.core.auth import create_jwt_token, get_current_user, require_user
 from app.api.main import api_router
 from app.core.config import settings
@@ -110,8 +112,59 @@ async def logout(current_user: dict | None = Depends(get_current_user)):
 
 
 # =====================================================================
+# 📤 联网搜索结果提审入库
+# =====================================================================
+
+class SubmitForReviewRequest(BaseModel):
+    original_query: str = Field(..., description="触发联网搜索的问题")
+    web_sources: list[str] = Field(default_factory=list)
+    web_content: str = Field(..., description="联网搜索内容")
+
+
+@app.post("/api/v1/submit-review")
+async def submit_for_review(body: SubmitForReviewRequest, current_user: dict | None = Depends(get_current_user)):
+    doc = PendingDocModel(
+        original_query=body.original_query,
+        web_sources=body.web_sources,
+        web_content=body.web_content,
+        submitted_by=current_user["user_id"] if current_user else None,
+    )
+    result = await pending_docs_collection.insert_one(doc.model_dump())
+    return {"status": "success", "message": "已提交审核，等待管理员处理", "doc_id": doc.doc_id}
+
+
+# =====================================================================
 # 🔐 登录接口 —— JWT + token 表
 # =====================================================================
+
+class AdminResetPasswordRequest(BaseModel):
+    username: str = Field(..., description="要重置密码的用户名")
+    new_password: str = Field(..., min_length=6, description="新密码，至少6位")
+
+
+@app.post("/api/v1/admin/reset-password")
+async def admin_reset_password(
+    body: AdminResetPasswordRequest,
+    current_user: dict | None = Depends(require_user),
+):
+    role = current_user.get("role", "employee")
+    if role not in ("boss", "hr"):
+        raise HTTPException(status_code=403, detail="仅管理员可重置密码")
+
+    target = await users_collection.find_one({"username": body.username})
+    if not target:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    new_hash = bcrypt.hashpw(body.new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    await users_collection.update_one(
+        {"username": body.username},
+        {"$set": {"password_hash": new_hash}},
+    )
+
+    await tokens_collection.delete_many({"user_id": target.get("user_id")})
+
+    return {"status": "success", "message": f"用户 {body.username} 密码已重置，旧token已失效"}
+
 
 @app.post("/api/v1/login/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
