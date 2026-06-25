@@ -13,7 +13,7 @@ if backend_dir not in sys.path:
 import uuid
 import bcrypt
 from datetime import datetime
-from app.core.mdb import users_collection # 确保路径正确
+from app.core.database import users_collection
 
 async def create_user(username, password, role="employee", kb_list=None):
     try:

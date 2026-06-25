@@ -1,22 +1,7 @@
-# backend/app/core/mdb.py
 import uuid
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 from datetime import datetime
 
-# 1. 🔌 统一连接本地 MongoDB
-MONGO_DETAILS = MONGO_DETAILS = "mongodb+srv://guanghui133925_db_user:qOROl5JEjagcds63@cluster0.atjyqa7.mongodb.net/?appName=Cluster0"
-client = AsyncIOMotorClient(MONGO_DETAILS)
-db = client["hr_assistant_db"]
-
-# 2. 🗂️ 统一挂载集合
-feedback_collection = db["feedbacks"]
-search_logs_collection = db["search_logs"]
-users_collection = db["users"]
-tokens_collection = db["tokens"]              # ← 新增 token 表
-
-
-# 3. 📝 Pydantic 模型
 
 class MongoUserModel(BaseModel):
     user_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="用户唯一 ID")
@@ -52,4 +37,5 @@ class SearchLogModel(BaseModel):
     user_ip: str | None = Field(default=None, description="用户 IP 地址")
     status: str = Field(default="success", description="请求状态: success / error")
     error_message: str | None = Field(default=None, description="错误信息")
+    response_length: int = Field(default=0, description="响应长度")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="搜索时间")

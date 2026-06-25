@@ -1,6 +1,6 @@
 from typing import Any
 from fastapi import APIRouter, Query
-from app.core.mdb import search_logs_collection
+from app.core.database import search_logs_collection
 
 router = APIRouter()
 

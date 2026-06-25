@@ -3,7 +3,7 @@ import os
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
-from app.core.mdb import tokens_collection, users_collection
+from app.core.database import tokens_collection, users_collection
 
 SECRET_KEY = os.getenv("SECRET_KEY", "changethis")
 ALGORITHM = "HS256"
