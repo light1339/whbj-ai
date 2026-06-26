@@ -1,0 +1,50 @@
+.custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.star-active { color: #f59e0b !important; transform: scale(1.1); }
+.star-btn { transition: all 0.15s ease-in-out; }
+.star-btn:hover { transform: scale(1.2); }
+
+/* 新规滚动条平滑动画 */
+@keyframes scroll-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.animate-scroll {
+    display: flex;
+    width: max-content;
+    animation: scroll-left 35s linear infinite;
+}
+.animate-scroll:hover { animation-play-state: paused; }
+
+/* 清除上下文刷新动画 */
+@keyframes fadeOutBlur {
+    0%   { opacity: 1; filter: blur(0px); transform: scale(1); }
+    100% { opacity: 0; filter: blur(6px); transform: scale(0.97); }
+}
+@keyframes fadeInSlide {
+    0%   { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes sweepFlash {
+    0%   { opacity: 0; transform: translateY(-100%); }
+    40%  { opacity: 0.18; }
+    100% { opacity: 0; transform: translateY(100%); }
+}
+.chat-clearing {
+    animation: fadeOutBlur 0.35s ease-out forwards;
+    pointer-events: none;
+}
+.chat-restored {
+    animation: fadeInSlide 0.4s ease-out forwards;
+}
+/* 页面顶层扫光蒙版 */
+#clearFlashOverlay {
+    position: fixed; inset: 0; z-index: 9999;
+    background: linear-gradient(180deg, rgba(99,102,241,0.18) 0%, rgba(59,130,246,0.10) 50%, transparent 100%);
+    pointer-events: none;
+    opacity: 0;
+}
+#clearFlashOverlay.active {
+    animation: sweepFlash 0.55s ease-in-out forwards;
+}
