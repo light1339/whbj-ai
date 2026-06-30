@@ -98,11 +98,17 @@ async def chat_with_knowledge_base(
         body = await request.json()
         user_query = body.get("query", "").strip()
         deep_think = body.get("deep_think", False)
+        file_content = body.get("file_content", "")
+        file_name = body.get("file_name", "")
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
     if not user_query:
         raise HTTPException(status_code=400, detail="查询内容不能为空")
+
+    # 如果有上传文件内容，拼接到查询中
+    if file_content:
+        user_query = f"以下是用户上传的文件《{file_name}》的内容：\n\n{file_content}\n\n---\n\n用户问题：{user_query}"
 
     start_time = time.time()
     full_response = ""

@@ -94,9 +94,30 @@
                 </div>
             </main>
 
-            <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] flex-shrink-0">
+            <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] flex-shrink-0 relative">
+                <!-- 文件预览 -->
+                <div id="filePreviewContainer" class="max-w-4xl mx-auto px-1 pb-2 hidden"></div>
+                <!-- 拖拽区域 -->
+                <div id="dropZone" class="max-w-4xl mx-auto hidden mb-2 border-2 border-dashed border-blue-300 rounded-xl bg-blue-50/50 p-6 text-center transition-all relative">
+                    <button onclick="hideDropZone()" class="absolute top-2 right-2 text-slate-400 hover:text-slate-600 cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                    <div class="text-blue-500 text-sm flex items-center justify-center space-x-2">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                        <span>将文件拖放到此处即可上传</span>
+                    </div>
+                    <div class="text-xs text-slate-400 mt-1">支持 PDF、Word、Excel、TXT、图片等格式，最大 10MB</div>
+                </div>
                 <div class="max-w-4xl mx-auto flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all duration-200">
-                    <input type="text" id="userInput" placeholder="请输入政策关键词、标准号或合规疑问（如：JT/T 617要求？危险化学品经营许可证怎么办理？）..." class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none" autocomplete="off">
+                    <!-- 上传文件 -->
+                    <span onclick="openFilePicker()" title="上传文件（PDF/Word/TXT等）" class="text-slate-400 hover:text-blue-500 p-2 rounded-lg hover:bg-blue-50 transition-all cursor-pointer flex-shrink-0 flex items-center justify-center">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.585a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                    </span>
+                    <span onclick="showDropZone()" title="拖拽上传" class="text-slate-400 hover:text-blue-500 p-2 rounded-lg hover:bg-blue-50 transition-all cursor-pointer flex-shrink-0 flex items-center justify-center text-xs">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    </span>
+                    <input type="file" id="fileUpload" accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.csv,.png,.jpg,.jpeg" onchange="handleFileSelect(this)" style="display:none">
+                     <input type="text" id="userInput" placeholder="请输入政策关键词、标准号或合规疑问（如：JT/T 617要求？危险化学品经营许可证怎么办理？）..." class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none" autocomplete="off">
                     <button id="clearContextBtn" onclick="clearContext()" title="清除对话上下文，开启新话题" class="hidden text-slate-400 hover:text-red-400 p-2 rounded-lg hover:bg-red-50 transition-all duration-150 cursor-pointer flex-shrink-0 text-xs">
                         🗑️ 清除上下文
                     </button>
@@ -163,6 +184,6 @@
 
     <div id="clearFlashOverlay"></div>
 
-    <script src="/static/js/chat.js"></script>
+    <script src="/static/js/chat.js?v=20260626e"></script>
 </body>
 </html>

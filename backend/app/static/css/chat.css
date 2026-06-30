@@ -48,3 +48,18 @@
 #clearFlashOverlay.active {
     animation: sweepFlash 0.55s ease-in-out forwards;
 }
+
+/* 文件预览滑入动画 */
+.slideUp {
+    animation: slideUpIn 0.25s ease-out;
+}
+@keyframes slideUpIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 拖拽高亮 */
+body.drag-over footer {
+    border-color: #3b82f6 !important;
+    background: #eff6ff !important;
+}
