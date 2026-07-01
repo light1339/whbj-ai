@@ -1,0 +1,175 @@
+/* 自定义滚动条 */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+/* 滚动条平滑动画 */
+@keyframes scroll-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.animate-scroll {
+    display: flex;
+    width: max-content;
+    animation: scroll-left 35s linear infinite;
+}
+.animate-scroll:hover {
+    animation-play-state: paused;
+}
+
+/* 任务卡片动画 */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+#resultsList > div {
+    animation: fadeInUp 0.4s ease-out;
+}
+
+/* 进度条动画 */
+@keyframes progressPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+.progress-bar {
+    animation: progressPulse 2s ease-in-out infinite;
+}
+
+/* 视频播放器样式 */
+video {
+    outline: none;
+}
+video::-webkit-media-controls-panel {
+    background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
+}
+
+/* 加载动画 */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.loading-spinner {
+    animation: spin 1s linear infinite;
+}
+
+/* 状态标签 */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 500;
+}
+.status-pending {
+    background-color: #f1f5f9;
+    color: #64748b;
+}
+.status-processing {
+    background-color: #eff6ff;
+    color: #3b82f6;
+}
+.status-completed {
+    background-color: #ecfdf5;
+    color: #10b981;
+}
+.status-failed {
+    background-color: #fef2f2;
+    color: #ef4444;
+}
+
+/* 提示词高亮 */
+.prompt-highlight {
+    background: linear-gradient(120deg, #f3e8ff 0%, #e9d5ff 100%);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* 调试窗口样式 */
+#debugPanel {
+    transition: all 0.3s ease;
+}
+
+#debugPanel.hidden {
+    display: none;
+}
+
+.debug-log-item {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 11px;
+    transition: all 0.2s ease;
+}
+
+.debug-log-item:hover {
+    border-color: #a855f7;
+    box-shadow: 0 2px 8px rgba(168, 85, 247, 0.1);
+}
+
+.debug-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.debug-log-status {
+    display: flex;
+    align-items: center;
+    space-x: 4px;
+    font-weight: 600;
+}
+
+.debug-log-time {
+    color: #94a3b8;
+    font-size: 10px;
+}
+
+.debug-log-json {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 8px;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    color: #475569;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.debug-status-pending {
+    color: #64748b;
+    background-color: #f1f5f9;
+}
+
+.debug-status-processing {
+    color: #3b82f6;
+    background-color: #eff6ff;
+}
+
+.debug-status-completed {
+    color: #10b981;
+    background-color: #ecfdf5;
+}
+
+.debug-status-failed {
+    color: #ef4444;
+    background-color: #fef2f2;
+}
