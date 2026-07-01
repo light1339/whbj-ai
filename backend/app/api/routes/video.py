@@ -110,6 +110,7 @@ async def generate_video(
         negative_prompt = body.get("negative_prompt", "").strip()
         duration = body.get("duration", 5)  # 默认 5 秒
         resolution = body.get("resolution", "720p")
+        ratio = body.get("ratio", "16:9")  # 默认 16:9 横屏
         seed = body.get("seed", -1)
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
@@ -129,6 +130,7 @@ async def generate_video(
         "negative_prompt": negative_prompt,
         "duration": duration,
         "resolution": resolution,
+        "ratio": ratio,
         "seed": seed,
         "status": "pending",
         "created_at": datetime.utcnow(),
@@ -142,7 +144,7 @@ async def generate_video(
     await video_tasks_collection.insert_one(task_doc)
 
     # 异步调用火山引擎视频生成 API
-    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, negative_prompt, duration, resolution, seed))
+    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, negative_prompt, duration, resolution, ratio, seed))
 
     return {"task_id": task_id, "status": "pending", "message": "视频生成任务已提交"}
 
@@ -154,6 +156,7 @@ async def _call_volc_video_api(
     negative_prompt: str,
     duration: int,
     resolution: str,
+    ratio: str,
     seed: int,
 ):
     """异步调用火山引擎视频生成 API"""
@@ -187,7 +190,7 @@ async def _call_volc_video_api(
                 }
             ],
             "generate_audio": True,  # 生成音频
-            "ratio": "16:9",         # 默认横屏
+            "ratio": ratio,          # 视频比例（用户选择）
             "duration": duration,
             "watermark": False,      # 不加水印
         }

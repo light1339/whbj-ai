@@ -117,7 +117,7 @@
                 <div class="max-w-3xl mx-auto">
                     <!-- 高级选项 -->
                     <div id="advancedOptions" class="hidden mb-3 space-y-3">
-                        <div class="grid grid-cols-3 gap-3">
+                        <div class="grid grid-cols-4 gap-3">
                             <div>
                                 <label class="block text-xs text-slate-500 mb-1">时长</label>
                                 <select id="durationSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400">
@@ -131,6 +131,16 @@
                                 <select id="resolutionSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400">
                                     <option value="720p">720p</option>
                                     <option value="1080p">1080p</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">视频比例</label>
+                                <select id="ratioSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400">
+                                    <option value="16:9">16:9 横屏</option>
+                                    <option value="9:16">9:16 竖屏</option>
+                                    <option value="1:1">1:1 正方形</option>
+                                    <option value="4:3">4:3 标准</option>
+                                    <option value="3:4">3:4 竖版标准</option>
                                 </select>
                             </div>
                             <div>

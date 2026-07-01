@@ -170,6 +170,7 @@ async function handleGenerate() {
 
     const duration = document.getElementById('durationSelect').value;
     const resolution = document.getElementById('resolutionSelect').value;
+    const ratio = document.getElementById('ratioSelect').value;
     const seed = parseInt(document.getElementById('seedInput').value) || -1;
     const negativePrompt = document.getElementById('negativePromptInput').value.trim();
 
@@ -185,6 +186,7 @@ async function handleGenerate() {
                 negative_prompt: negativePrompt,
                 duration: parseInt(duration),
                 resolution: resolution,
+                ratio: ratio,
                 seed: seed,
             }),
         });
