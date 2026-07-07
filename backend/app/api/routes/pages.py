@@ -31,6 +31,11 @@ async def image_page(request: Request):
     return HTMLResponse(content=read_template("image.html"))
 
 
+@router.get("/image-edit", response_class=HTMLResponse)
+async def image_edit_page(request: Request):
+    return HTMLResponse(content=read_template("image-edit.html"))
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return HTMLResponse(content=read_template("login.html"))

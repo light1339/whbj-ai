@@ -1,0 +1,44 @@
+/* ========== 导航按钮 ========== */
+.nav-btn { display: inline-flex; align-items: center; }
+.nav-btn:hover { color: #f97316; }
+.nav-btn-active { display: inline-flex; align-items: center; }
+
+/* ========== 工具栏按钮 ========== */
+.tool-btn {
+    border-color: #e2e8f0;
+    color: #64748b;
+    background: #f8fafc;
+}
+.tool-btn:hover {
+    border-color: #f97316;
+    color: #f97316;
+    background: #fff7ed;
+}
+.tool-btn.tool-active {
+    border-color: #f97316;
+    color: #fff;
+    background: #f97316;
+    box-shadow: 0 1px 3px rgba(249, 115, 22, 0.3);
+}
+
+/* ========== 画布 ========== */
+#canvasContainer {
+    background: repeating-conic-gradient(#f1f5f9 0% 25%, #fff 0% 50%) 50% / 20px 20px;
+}
+
+/* ========== 自定义滚动条 ========== */
+.custom-scrollbar::-webkit-scrollbar { width: 5px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ========== 加载动画 ========== */
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+.edit-loading-shimmer {
+    background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}

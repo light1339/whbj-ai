@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>危化镖局 - 图片微调</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/static/css/image-edit.css">
+</head>
+<body class="bg-slate-50 h-screen flex flex-col font-sans overflow-hidden m-0 p-0">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
+        <div class="flex items-center space-x-3">
+            <a href="/image" class="text-slate-400 hover:text-slate-600 p-1 transition-colors">&larr;</a>
+            <div class="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center shadow-md shadow-orange-200">
+                <span class="text-white font-bold text-lg">✏️</span>
+            </div>
+            <div>
+                <h1 class="text-slate-800 font-bold text-base leading-tight">图片微调 - 局部编辑</h1>
+                <p class="text-slate-400 text-xs flex items-center mt-0.5">
+                    <span class="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1.5 animate-pulse"></span>
+                    涂抹要修改的区域 → 描述修改内容 → AI 局部重绘
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <div class="flex items-center space-x-2 bg-slate-100 rounded-lg p-1">
+                <a href="/image" class="nav-btn text-xs px-3 py-1.5 rounded-md transition-all text-slate-500 hover:text-slate-700">图片生成</a>
+                <a href="/image-edit" class="nav-btn-active text-xs px-3 py-1.5 rounded-md transition-all text-white bg-orange-600 shadow-sm">图片微调</a>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- 左侧：画布区域 -->
+        <div class="flex-1 flex flex-col items-center justify-center bg-slate-100 p-4 min-w-0">
+            <div id="canvasContainer" class="relative inline-block shadow-2xl rounded-xl overflow-hidden border-4 border-slate-300">
+                <canvas id="bgCanvas" class="block"></canvas>
+                <canvas id="maskCanvas" class="absolute top-0 left-0 block cursor-crosshair"></canvas>
+            </div>
+            <p class="text-xs text-slate-400 mt-3">提示：在图片上涂抹要修改的区域（红色半透明区域 = 将被 AI 重绘）</p>
+        </div>
+
+        <!-- 右侧：工具栏 + 输入区 -->
+        <div class="w-80 border-l border-slate-200 bg-white flex flex-col flex-shrink-0">
+
+            <!-- 工具栏 -->
+            <div class="p-4 border-b border-slate-100">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">🛠️ 绘制工具</h3>
+
+                <div class="space-y-3">
+                    <!-- 模式切换 -->
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1.5">模式</label>
+                        <div class="flex space-x-2">
+                            <button id="btnBrush" onclick="setTool('brush')" class="tool-btn tool-active flex-1 text-xs px-3 py-2 rounded-lg border transition-colors cursor-pointer">
+                                🖌️ 画刷
+                            </button>
+                            <button id="btnEraser" onclick="setTool('eraser')" class="tool-btn flex-1 text-xs px-3 py-2 rounded-lg border transition-colors cursor-pointer">
+                                🧹 橡皮
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 画刷大小 -->
+                    <div>
+                        <label class="block text-xs text-slate-500 mb-1.5">
+                            画刷大小：<span id="brushSizeLabel" class="font-bold text-slate-700">30px</span>
+                        </label>
+                        <input type="range" id="brushSize" min="5" max="120" value="30" oninput="setBrushSize(this.value)" class="w-full accent-orange-500">
+                    </div>
+
+                    <!-- 操作按钮 -->
+                    <div class="flex space-x-2">
+                        <button onclick="undoStroke()" class="flex-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-2 rounded-lg transition-colors cursor-pointer">↩ 撤销</button>
+                        <button onclick="clearMask()" class="flex-1 text-xs bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg transition-colors cursor-pointer">🗑 清空</button>
+                    </div>
+
+                    <!-- 快捷键提示 -->
+                    <div class="text-[10px] text-slate-400 space-y-0.5">
+                        <div>⌨ B = 画刷 / E = 橡皮</div>
+                        <div>⌨ Ctrl+Z = 撤销</div>
+                        <div>⌨ 滚轮 = 调整大小</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 提示词输入 -->
+            <div class="p-4 border-b border-slate-100">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">📝 修改描述</h3>
+                <div class="space-y-2">
+                    <textarea id="editPrompt" rows="3" placeholder="描述您要在涂抹区域生成的内容（如：add a red fire truck、替换为蓝天白云...）" class="w-full text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 resize-none"></textarea>
+                    <div class="flex space-x-2">
+                        <button onclick="doEditTranslate()" id="editTranslateBtn" title="翻译为英文" class="flex-1 text-xs bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 px-3 py-2 rounded-lg transition-colors cursor-pointer">🌐 翻译为英文</button>
+                        <button id="editGenerateBtn" onclick="handleEditGenerate()" class="flex-1 bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-all cursor-pointer disabled:opacity-50">✨ 微调生成</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 生成结果 -->
+            <div class="flex-1 p-4 overflow-y-auto custom-scrollbar">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">🖼 微调结果</h3>
+                <div id="editResults" class="space-y-3">
+                    <div class="text-xs text-slate-400 text-center py-8">暂无微调结果</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/image-edit.js"></script>
+</body>
+</html>

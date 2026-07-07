@@ -17,6 +17,45 @@ let refImages = [];
 const MAX_REF_IMAGES = 16;
 const MAX_REF_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// 翻译功能
+async function doTranslate() {
+    const input = document.getElementById('promptInput');
+    const btn = document.getElementById('translateBtn');
+    const text = input.value.trim();
+    if (!text) return;
+
+    btn.disabled = true;
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="3" class="opacity-25"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" class="opacity-75"/></svg>';
+
+    const token = localStorage.getItem('token') || '';
+    try {
+        const response = await fetch('/api/v1/image/translate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token,
+            },
+            body: JSON.stringify({ text: text }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.detail || '翻译失败');
+        }
+
+        const data = await response.json();
+        input.value = data.translated;
+        input.focus();
+
+    } catch (e) {
+        alert('翻译失败: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origHTML;
+    }
+}
+
 // 初始化用户信息
 (function initUserInfo() {
     const u = localStorage.getItem('username') || '用户';
@@ -339,7 +378,7 @@ function createTaskCard(taskId, prompt, size, quality, n, hasRef = false) {
                         <span class="status-text text-sm font-medium text-slate-500">排队中</span>
                         ${refBadge}
                     </div>
-                    <p class="text-sm text-slate-700 leading-relaxed">${prompt}</p>
+                    <p class="task-prompt text-sm text-slate-700 leading-relaxed">${prompt}</p>
                 </div>
                 <button onclick="deleteTask('${taskId}')" class="text-slate-400 hover:text-red-500 p-1 rounded transition-colors" title="删除任务">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -415,6 +454,17 @@ function startPolling(taskId, prompt, size, quality, n) {
             addDebugLog(taskId, data, status);
             updateTaskStatus(card, status, data);
 
+            // 如果有原始中文 prompt，显示双语
+            if (data.original_prompt) {
+                const promptEl = card.querySelector('.task-prompt');
+                if (promptEl) {
+                    promptEl.innerHTML = `
+                        <span class="prompt-highlight">${escapeHtml(data.prompt || '')}</span>
+                        <span class="block text-xs text-slate-400 mt-1">原文：${escapeHtml(data.original_prompt)}</span>
+                    `;
+                }
+            }
+
             if (status === 'completed') {
                 clearInterval(pollInterval);
                 clearInterval(progressTimer);
@@ -487,12 +537,19 @@ function showImageResult(card, data) {
         </a>
     `).join('');
 
+    const editButtons = paths.map((path, i) => `
+        <a href="/image-edit?src=${encodeURIComponent(path)}" class="inline-flex items-center space-x-1 text-xs bg-orange-600 hover:bg-orange-700 text-white px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+            <span>✏️ 微调${paths.length > 1 ? ' #'+(i+1) : ''}</span>
+        </a>
+    `).join('');
+
     taskResult.innerHTML = `
         <div class="grid ${gridCols} gap-3">
             ${imagesHtml}
         </div>
-        <div class="flex items-center space-x-3 mt-3">
+        <div class="flex flex-wrap items-center gap-2 mt-3">
             ${downloadButtons}
+            ${editButtons}
             <button onclick="copyPrompt('${escapeHtml(data.prompt || '')}')" class="inline-flex items-center space-x-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
                 <span>复制提示词</span>
@@ -658,6 +715,17 @@ async function scrollToTask(taskId) {
 
         // 更新状态
         updateTaskStatus(card, data.status);
+
+        // 如果有原始中文 prompt，显示双语
+        if (data.original_prompt) {
+            const promptEl = card.querySelector('.task-prompt');
+            if (promptEl) {
+                promptEl.innerHTML = `
+                    <span class="prompt-highlight">${escapeHtml(data.prompt || '')}</span>
+                    <span class="block text-xs text-slate-400 mt-1">原文：${escapeHtml(data.original_prompt)}</span>
+                `;
+            }
+        }
 
         // 已完成：展示结果
         if (data.status === 'completed') {
