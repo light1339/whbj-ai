@@ -26,6 +26,11 @@ async def video_page(request: Request):
     return HTMLResponse(content=read_template("video.html"))
 
 
+@router.get("/image", response_class=HTMLResponse)
+async def image_page(request: Request):
+    return HTMLResponse(content=read_template("image.html"))
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return HTMLResponse(content=read_template("login.html"))

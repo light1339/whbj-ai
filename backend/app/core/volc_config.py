@@ -21,6 +21,11 @@ VOLC_VIDEO_API_KEY = os.getenv("VOLC_VIDEO_API_KEY")
 VOLC_VIDEO_BASE_URL = os.getenv("VOLC_VIDEO_BASE_URL", "https://video.cn-beijing.volces.com/api/v1")
 VOLC_VIDEO_MODEL = os.getenv("VOLC_VIDEO_MODEL", "doubao-seedance-2-0-260128")
 
+# OpenAI 图片生成配置
+OPENAI_IMAGE_API_KEY = os.getenv("OPENAI_IMAGE_API_KEY")
+OPENAI_IMAGE_BASE_URL = os.getenv("OPENAI_IMAGE_BASE_URL", "https://api.openai.com/v1")
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2")
+
 if not VOLC_KB_API_KEY:
     print("⚠️ 警告: 未设置 VOLC_KNOWLEDGE_API_KEY，知识库功能将不可用")
 if not KB_POOL["default"]:

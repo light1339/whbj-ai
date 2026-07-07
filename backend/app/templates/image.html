@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>危化镖局 - AI 图片生成</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="/static/css/image.css">
+</head>
+<body class="bg-slate-50 h-screen flex flex-col font-sans overflow-hidden m-0 p-0">
+
+    <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
+        <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center shadow-md shadow-emerald-200">
+                <span class="text-white font-bold text-lg">🖼</span>
+            </div>
+            <div>
+                <h1 class="text-slate-800 font-bold text-base leading-tight">危化镖局 - AI 图片生成</h1>
+                <p class="text-slate-400 text-xs flex items-center mt-0.5">
+                    <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse"></span>
+                    基于 OpenAI gpt-image-2 大模型，一键生成高质量图片
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <!-- 导航切换 -->
+            <div class="flex items-center space-x-2 bg-slate-100 rounded-lg p-1">
+                <a href="/" class="nav-btn text-xs px-3 py-1.5 rounded-md transition-all text-slate-500 hover:text-slate-700">
+                    政策问答
+                </a>
+                <a href="/video" class="nav-btn text-xs px-3 py-1.5 rounded-md transition-all text-slate-500 hover:text-slate-700">
+                    视频生成
+                </a>
+                <a href="/image" class="nav-btn-active text-xs px-3 py-1.5 rounded-md transition-all text-white bg-emerald-600 shadow-sm">
+                    图片生成
+                </a>
+            </div>
+            <!-- 个人中心下拉 -->
+            <div class="relative" id="userDropdown">
+                <button onclick="toggleUserMenu()" class="flex items-center space-x-2 bg-slate-100 hover:bg-slate-200 border border-slate-200/60 px-3 py-1.5 rounded-lg transition-colors cursor-pointer">
+                    <span class="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-bold" id="avatarLetter">U</span>
+                    <span class="text-slate-600 text-xs font-medium" id="displayUsername">用户</span>
+                    <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </button>
+                <div id="userMenu" class="hidden absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden">
+                    <div class="px-3 py-2.5 border-b border-slate-100">
+                        <p class="text-xs text-slate-800 font-medium" id="menuUsername">--</p>
+                        <p class="text-[10px] text-slate-400" id="menuRole">--</p>
+                    </div>
+                    <button onclick="handleLogout()" class="w-full text-left px-3 py-2 text-xs text-red-500 hover:bg-red-50 transition-colors flex items-center space-x-1.5 cursor-pointer">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        <span>退出登录</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="bg-emerald-50 border-b border-emerald-100 h-9 flex items-center overflow-hidden flex-shrink-0 px-6 text-xs text-emerald-800">
+        <div class="flex items-center space-x-2 font-bold flex-shrink-0 bg-emerald-50 pr-4 z-10 shadow-[8px_0_6px_-4px_rgba(240,253,244,1)]">
+            <span>💡</span>
+            <span>生图提示：</span>
+        </div>
+        <div class="flex-1 overflow-hidden relative">
+            <div class="animate-scroll whitespace-nowrap flex space-x-12">
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('危化品运输车辆安全警示海报，蓝色基调，专业风格')">① 安全警示海报 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('现代化危化品仓库实景，货架整齐排列，工人穿戴防护装备操作')">② 仓库实景展示 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('化工园区鸟瞰图，运输通道清晰，绿植环绕，现代工业园区风格')">③ 园区鸟瞰图 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('消防安全培训插图，卡通风格，消防员演示灭火器使用方法，文字标注步骤')">④ 安全培训插图 →</span>
+
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('危化品运输车辆安全警示海报，蓝色基调，专业风格')">① 安全警示海报 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('现代化危化品仓库实景，货架整齐排列，工人穿戴防护装备操作')">② 仓库实景展示 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('化工园区鸟瞰图，运输通道清晰，绿植环绕，现代工业园区风格')">③ 园区鸟瞰图 →</span>
+                <span class="cursor-pointer hover:underline" onclick="fillPrompt('消防安全培训插图，卡通风格，消防员演示灭火器使用方法，文字标注步骤')">④ 安全培训插图 →</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 flex overflow-hidden">
+
+        <!-- 主内容区 -->
+        <div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+            <main class="flex-1 overflow-y-auto px-6 py-6 custom-scrollbar" id="imageContainer">
+                <!-- 欢迎区域 -->
+                <div class="max-w-6xl mx-auto">
+                    <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-8 mb-6">
+                        <div class="flex items-center space-x-3 mb-4">
+                            <div class="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center text-emerald-600 text-2xl">🖼</div>
+                            <div>
+                                <h2 class="text-lg font-bold text-slate-800">AI 图片生成</h2>
+                                <p class="text-slate-400 text-xs">输入描述，AI 将为您生成高质量图片</p>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4 text-sm text-slate-600">
+                            <div class="flex items-start space-x-2">
+                                <span class="text-emerald-500 mt-0.5">✦</span>
+                                <span>基于 OpenAI gpt-image-2 最新模型，文字渲染精准、多风格支持</span>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <span class="text-emerald-500 mt-0.5">✦</span>
+                                <span>支持多种分辨率，最高可达 2000px 宽边</span>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <span class="text-emerald-500 mt-0.5">✦</span>
+                                <span>一次可生成 1-10 张，thinking 模式可对构图进行推演优化</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 生成结果列表 -->
+                    <div id="resultsList" class="space-y-4">
+                        <!-- 动态生成的结果将显示在这里 -->
+                    </div>
+                </div>
+            </main>
+
+            <!-- 输入区域 -->
+            <footer class="bg-white border-t border-slate-200 p-4 shadow-[0_-4px_12px_rgba(0,0,0,0.03)] flex-shrink-0">
+                <div class="max-w-6xl mx-auto">
+                    <div id="advancedOptions" class="hidden mb-3 space-y-3">
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">分辨率</label>
+                                <select id="sizeSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400">
+                                    <option value="1024x1024">1024x1024 正方形</option>
+                                    <option value="1024x1536">1024x1536 竖版</option>
+                                    <option value="1536x1024">1536x1024 横版</option>
+                                    <option value="2000x1000">2000x1000 宽屏</option>
+                                    <option value="1000x2000">1000x2000 竖屏</option>
+                                    <option value="2000x667">2000x667 超宽</option>
+                                    <option value="667x2000">667x2000 超高</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">画质</label>
+                                <select id="qualitySelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400">
+                                    <option value="medium">medium 标准</option>
+                                    <option value="high">high 高清</option>
+                                    <option value="low">low 快速</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">推理深度 (thinking)</label>
+                                <select id="thinkingSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400">
+                                    <option value="off">off 关闭</option>
+                                    <option value="low">low 轻度</option>
+                                    <option value="medium">medium 中度</option>
+                                    <option value="high">high 深度</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">生成张数</label>
+                                <select id="nSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400">
+                                    <option value="1">1 张</option>
+                                    <option value="2">2 张</option>
+                                    <option value="4">4 张</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">背景</label>
+                                <select id="backgroundSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400">
+                                    <option value="auto">auto 自动</option>
+                                    <option value="opaque">opaque 不透明</option>
+                                    <option value="transparent">transparent 透明</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">随机种子</label>
+                                <input type="number" id="seedInput" placeholder="-1 (随机)" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-emerald-400" value="-1">
+                            </div>
+                        </div>
+                        <!-- 参考图上传 -->
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1.5">参考图片 <span class="text-slate-300">(可选，最多 16 张，支持 JPG/PNG/WEBP)</span></label>
+                            <div class="flex items-center space-x-2">
+                                <label id="refUploadLabel" class="flex items-center space-x-1 text-xs bg-slate-50 hover:bg-emerald-50 border border-dashed border-slate-300 hover:border-emerald-400 text-slate-500 hover:text-emerald-600 px-3 py-2 rounded-lg cursor-pointer transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                    <span>添加参考图</span>
+                                    <input type="file" id="refFileInput" accept="image/jpeg,image/png,image/webp" multiple class="hidden" onchange="handleRefFileSelect(event)">
+                                </label>
+                                <span id="refCountText" class="text-xs text-slate-400">未选择</span>
+                                <button onclick="clearRefImages()" id="clearRefBtn" class="hidden text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded transition-colors cursor-pointer">清空</button>
+                            </div>
+                            <div id="refPreviewArea" class="flex flex-wrap gap-2 mt-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center space-x-3 bg-slate-50 border border-slate-200 rounded-xl p-1.5 focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all duration-200">
+                        <button onclick="toggleAdvanced()" title="高级选项" class="text-slate-400 hover:text-emerald-500 p-2 rounded-lg hover:bg-emerald-50 transition-all cursor-pointer flex-shrink-0">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        </button>
+                        <textarea id="promptInput" rows="2" placeholder="描述您想要生成的图片内容（如：现代化工业园区鸟瞰图，蓝天白云，绿植环绕...）" class="flex-1 bg-transparent px-3 py-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none resize-none" autocomplete="off"></textarea>
+                        <button id="generateBtn" onclick="handleGenerate()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-all shadow-sm flex items-center space-x-1 flex-shrink-0 cursor-pointer disabled:opacity-50">
+                            <span>✨ 生成</span>
+                        </button>
+                    </div>
+                </div>
+            </footer>
+        </div>
+
+        <!-- 右侧边栏 -->
+        <div class="w-80 border-l border-slate-200 bg-white p-4 flex flex-col space-y-4 custom-scrollbar overflow-y-auto hidden lg:flex flex-shrink-0">
+            <div>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🔥 热门生图场景</h3>
+                <div class="flex flex-wrap gap-2">
+                    <span onclick="fillPrompt('危化品泄漏应急处理流程图，清晰的分步骤插画，文字标注各步骤要点')" class="text-xs bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 应急流程</span>
+                    <span onclick="fillPrompt('危险品仓库内景，工人正确佩戴安全帽和防护服操作叉车，光线明亮')" class="text-xs bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 仓储安全</span>
+                    <span onclick="fillPrompt('化工园区大门设计效果图，现代简约风格，智能化门禁系统')" class="text-xs bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 园区设计</span>
+                    <span onclick="fillPrompt('安全培训课堂场景，讲师用投影仪讲解危化品分类，学员认真听讲')" class="text-xs bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 培训教育</span>
+                    <span onclick="fillPrompt('危化品运输车辆监控中心，多块大屏幕显示实时路况和车辆位置地图')" class="text-xs bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 px-2.5 py-1 rounded-md border border-slate-200/60 cursor-pointer transition-colors"># 监控中心</span>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <div>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">📜 生成历史</h3>
+                <div id="historyList" class="space-y-2">
+                    <div class="text-xs text-slate-400 text-center py-4">暂无历史记录</div>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
+            <div>
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">💡 使用技巧</h3>
+                <div class="space-y-2 text-xs text-slate-500">
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                        <div class="font-bold text-slate-700 mb-1">✍️ 提示词技巧</div>
+                        <div>英文提示词效果更佳。描述场景、风格、光线、颜色等细节。</div>
+                    </div>
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200/60">
+                        <div class="font-bold text-slate-700 mb-1">⚙️ thinking 参数</div>
+                        <div>开启 thinking 会让模型在生成前推演构图，适合复杂场景，但耗时更长。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- 状态调试窗口 -->
+    <div id="debugPanel" class="fixed bottom-4 right-4 w-96 max-h-[600px] bg-white border border-slate-300 rounded-xl shadow-2xl z-50 flex flex-col overflow-hidden hidden">
+        <div class="bg-slate-100 border-b border-slate-300 px-4 py-2 flex items-center justify-between flex-shrink-0">
+            <div class="flex items-center space-x-2">
+                <span class="text-xs font-bold text-slate-700">🔍 状态调试</span>
+                <span id="debugCount" class="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-full">0</span>
+            </div>
+            <div class="flex items-center space-x-1">
+                <button onclick="clearDebugLogs()" class="text-slate-500 hover:text-red-500 p-1 rounded transition-colors" title="清空日志">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+                <button onclick="toggleDebugPanel()" class="text-slate-500 hover:text-slate-700 p-1 rounded transition-colors" title="最小化">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                </button>
+                <button onclick="toggleDebugPanel()" class="text-slate-500 hover:text-slate-700 p-1 rounded transition-colors" title="关闭">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="debugContent" class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar bg-slate-50">
+            <div class="text-xs text-slate-400 text-center py-8">暂无调试记录</div>
+        </div>
+    </div>
+
+    <script src="/static/js/image.js"></script>
+</body>
+</html>
