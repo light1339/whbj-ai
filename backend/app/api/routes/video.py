@@ -209,6 +209,8 @@ async def _call_volc_video_api(
             timeout=30,
         )
         print(f"📥 响应状态码: {response.status_code}")
+        if response.status_code != 200:
+            print(f"📥 错误响应体: {response.text[:1000]}")
         response.raise_for_status()
         result = response.json()
         print(f"📥 响应数据: {result}")
