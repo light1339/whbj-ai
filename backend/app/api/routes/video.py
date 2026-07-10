@@ -74,7 +74,6 @@ async def generate_video(
                 "_id": task_id,
                 "user_id": user_id,
                 "prompt": "测试视频生成（固定任务 ID）",
-                "negative_prompt": "",
                 "duration": 5,
                 "resolution": "720p",
                 "seed": -1,
@@ -107,16 +106,20 @@ async def generate_video(
     try:
         body = await request.json()
         prompt = body.get("prompt", "").strip()
-        negative_prompt = body.get("negative_prompt", "").strip()
         duration = body.get("duration", 5)  # 默认 5 秒
         resolution = body.get("resolution", "720p")
         ratio = body.get("ratio", "16:9")  # 默认 16:9 横屏
         seed = body.get("seed", -1)
+        reference_images = body.get("reference_images", None)  # 参考角色图片（base64 列表）
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
     if not prompt:
         raise HTTPException(status_code=400, detail="提示词不能为空")
+    if reference_images and not isinstance(reference_images, list):
+        raise HTTPException(status_code=400, detail="参考图片格式错误，必须为数组")
+    if reference_images and len(reference_images) > 3:
+        raise HTTPException(status_code=400, detail="参考图片最多 3 张")
 
     # 生成任务 ID（仅用于前端追踪）
     task_id = str(uuid.uuid4())
@@ -127,11 +130,12 @@ async def generate_video(
         "_id": task_id,
         "user_id": user_id,
         "prompt": prompt,
-        "negative_prompt": negative_prompt,
         "duration": duration,
         "resolution": resolution,
         "ratio": ratio,
         "seed": seed,
+        "has_reference": bool(reference_images),
+        "reference_count": len(reference_images) if reference_images else 0,
         "status": "pending",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
@@ -144,7 +148,7 @@ async def generate_video(
     await video_tasks_collection.insert_one(task_doc)
 
     # 异步调用火山引擎视频生成 API
-    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, negative_prompt, duration, resolution, ratio, seed))
+    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, duration, resolution, ratio, seed, reference_images))
 
     return {"task_id": task_id, "status": "pending", "message": "视频生成任务已提交"}
 
@@ -153,11 +157,11 @@ async def _call_volc_video_api(
     task_id: str,
     user_id: str | None,
     prompt: str,
-    negative_prompt: str,
     duration: int,
     resolution: str,
     ratio: str,
     seed: int,
+    reference_images: list[str] | None = None,
 ):
     """异步调用火山引擎视频生成 API"""
     try:
@@ -180,10 +184,20 @@ async def _call_volc_video_api(
             "Content-Type": "application/json",
         }
 
+        # 构造 content 数组：参考图片在前，文本提示词在后
+        content = []
+        if reference_images:
+            for img_url in reference_images:
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": img_url},
+                    "role": "reference_image",
+                })
+
         # 使用官方 content 格式
         payload = {
             "model": model,
-            "content": [
+            "content": content + [
                 {
                     "type": "text",
                     "text": prompt,

@@ -12,6 +12,11 @@ console.log('video.js 已加载');
 const debugLogs = [];
 let debugPanelVisible = false;
 
+// 参考图存储 { name, base64 } 数组
+let refImages = [];
+const MAX_REF_IMAGES = 3;
+const MAX_REF_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
 // 初始化用户信息
 (function initUserInfo() {
     const u = localStorage.getItem('username') || '用户';
@@ -146,6 +151,90 @@ function fillPrompt(text) {
     }
 }
 
+// ========== 参考图处理 ==========
+function handleRefImageSelect(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+
+    const remaining = MAX_REF_IMAGES - refImages.length;
+    if (remaining <= 0) {
+        alert(`最多只能上传 ${MAX_REF_IMAGES} 张参考图`);
+        event.target.value = '';
+        return;
+    }
+
+    const toProcess = Math.min(files.length, remaining);
+    let validCount = 0;
+    let loadedCount = 0;
+
+    for (let i = 0; i < toProcess; i++) {
+        const file = files[i];
+        if (file.size > MAX_REF_FILE_SIZE) {
+            alert(`图片 "${file.name}" 超过 10MB 限制`);
+            continue;
+        }
+        if (!file.type.startsWith('image/')) {
+            alert(`"${file.name}" 不是图片文件`);
+            continue;
+        }
+
+        validCount++;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            refImages.push({
+                name: file.name,
+                base64: e.target.result,
+            });
+            loadedCount++;
+            if (loadedCount === validCount) {
+                renderRefPreviews();
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    event.target.value = '';
+
+    if (validCount === 0) {
+        renderRefPreviews();
+    }
+}
+
+function removeRefImage(index) {
+    refImages.splice(index, 1);
+    renderRefPreviews();
+}
+
+function renderRefPreviews() {
+    const container = document.getElementById('refPreviews');
+    if (!container) return;
+
+    const promptInput = document.getElementById('promptInput');
+
+    if (refImages.length === 0) {
+        container.innerHTML = '<span class="text-xs text-slate-400">未选择参考图</span>';
+        if (promptInput) {
+            promptInput.placeholder = '描述您想要生成的视频内容（如：日系治愈插画少女站在初夏樱花街道）...';
+        }
+        return;
+    }
+
+    container.innerHTML = refImages.map((img, i) => `
+        <div class="relative flex-shrink-0 group">
+            <img src="${img.base64}" class="w-10 h-10 rounded-lg object-cover border border-slate-200" title="${img.name}">
+            <button onclick="removeRefImage(${i})" class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer leading-none">x</button>
+        </div>
+    `).join('');
+
+    // 有参考图时更新提示词引导
+    if (promptInput) {
+        promptInput.placeholder = '已添加参考角色图片，请描述想让角色做什么（如：在樱花树下微笑走路，微风拂过头发）...';
+        if (!promptInput.value.trim()) {
+            promptInput.focus();
+        }
+    }
+}
+
 // 任务状态映射
 const statusMap = {
     'pending': { text: '排队中', icon: '⏳', color: 'text-slate-500', bg: 'bg-slate-50' },
@@ -172,7 +261,9 @@ async function handleGenerate() {
     const resolution = document.getElementById('resolutionSelect').value;
     const ratio = document.getElementById('ratioSelect').value;
     const seed = parseInt(document.getElementById('seedInput').value) || -1;
-    const negativePrompt = document.getElementById('negativePromptInput').value.trim();
+
+    // 收集参考图 base64
+    const referenceImages = refImages.map(img => img.base64);
 
     try {
         const response = await fetch('/api/v1/video/generate', {
@@ -183,11 +274,11 @@ async function handleGenerate() {
             },
             body: JSON.stringify({
                 prompt: prompt,
-                negative_prompt: negativePrompt,
                 duration: parseInt(duration),
                 resolution: resolution,
                 ratio: ratio,
                 seed: seed,
+                reference_images: referenceImages.length > 0 ? referenceImages : undefined,
             }),
         });
 
@@ -199,13 +290,16 @@ async function handleGenerate() {
         const taskId = data.task_id;
 
         // 创建任务卡片
-        createTaskCard(taskId, prompt, duration, resolution);
+        createTaskCard(taskId, prompt, duration, resolution, refImages.length);
 
         // 开始轮询状态
         startPolling(taskId, prompt, duration, resolution);
 
         // 清空输入
         document.getElementById('promptInput').value = '';
+        // 清空参考图
+        refImages = [];
+        renderRefPreviews();
 
     } catch (error) {
         console.error('提交任务失败:', error);
@@ -217,11 +311,12 @@ async function handleGenerate() {
 }
 
 // 创建任务卡片
-function createTaskCard(taskId, prompt, duration, resolution) {
+function createTaskCard(taskId, prompt, duration, resolution, refCount = 0) {
     const container = document.getElementById('resultsList');
     const card = document.createElement('div');
     card.id = `task-${taskId}`;
     card.className = 'bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden';
+    const refBadge = refCount > 0 ? `<span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">🖼 参考图 x${refCount}</span>` : '';
     card.innerHTML = `
         <div class="p-5">
             <div class="flex items-start justify-between mb-3">
@@ -229,6 +324,7 @@ function createTaskCard(taskId, prompt, duration, resolution) {
                     <div class="flex items-center space-x-2 mb-2">
                         <span class="status-icon text-lg">⏳</span>
                         <span class="status-text text-sm font-medium text-slate-500">排队中</span>
+                        ${refBadge}
                     </div>
                     <p class="text-sm text-slate-700 leading-relaxed">${prompt}</p>
                 </div>
@@ -341,7 +437,7 @@ function startPolling(taskId, prompt, duration, resolution) {
             clearInterval(progressTimer);
             showError(card, '网络请求失败，请稍后重试');
         }
-    }, 3000); // 每 3 秒轮询一次
+    }, 10000); // 每 10 秒查一次状态
 
     activeTasks[taskId].polling = pollInterval;
 }
@@ -513,6 +609,13 @@ function scrollToTask(taskId) {
 // 页面加载时加载历史
 document.addEventListener('DOMContentLoaded', () => {
     loadHistory();
+    renderRefPreviews();
+
+    // 参考图上传事件
+    const refInput = document.getElementById('refImageInput');
+    if (refInput) {
+        refInput.addEventListener('change', handleRefImageSelect);
+    }
 
     // 回车键生成（已禁用，防止意外触发）
     // document.getElementById('promptInput').addEventListener('keydown', (e) => {
@@ -546,7 +649,6 @@ async function testCreateTask() {
             },
             body: JSON.stringify({
                 prompt: '🎬 测试视频生成（固定火山引擎任务 ID）',
-                negative_prompt: '',
                 duration: 5,
                 resolution: '720p',
                 seed: -1,

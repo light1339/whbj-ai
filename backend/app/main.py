@@ -1,8 +1,9 @@
 import sentry_sdk
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.core.database import client
 from app.api.main import api_router
@@ -43,6 +44,16 @@ if settings.all_cors_origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# 开发环境：禁止静态文件缓存，改代码后直接刷新即可生效
+class NoCacheStaticMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+app.add_middleware(NoCacheStaticMiddleware)
 
 app.include_router(pages_router)
 app.include_router(api_router, prefix=settings.API_V1_STR)

@@ -150,9 +150,20 @@
                                 <input type="number" id="seedInput" placeholder="-1 (随机)" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400" value="-1">
                             </div>
                         </div>
-                        <div>
-                            <label class="block text-xs text-slate-500 mb-1">反向提示词（可选）</label>
-                            <input type="text" id="negativePromptInput" placeholder="描述不想要的内容..." class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400">
+                    </div>
+                    
+                    <!-- 参考角色图片上传 -->
+                    <div class="mb-3">
+                        <label class="block text-xs text-slate-500 mb-1">参考角色图片（可选，最多 3 张）</label>
+                        <div class="flex items-center space-x-2">
+                            <div id="refPreviews" class="flex items-center space-x-2 flex-1 min-w-0 overflow-x-auto">
+                                <!-- 动态渲染缩略图 -->
+                            </div>
+                            <label class="flex-shrink-0 bg-slate-100 hover:bg-purple-50 border border-dashed border-slate-300 hover:border-purple-400 rounded-lg px-3 py-2 cursor-pointer transition-colors text-xs text-slate-500 hover:text-purple-600">
+                                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                上传
+                                <input type="file" id="refImageInput" accept="image/*" multiple class="hidden">
+                            </label>
                         </div>
                     </div>
                     
