@@ -131,6 +131,7 @@
                             <div>
                                 <label class="block text-xs text-slate-500 mb-1">分辨率</label>
                                 <select id="resolutionSelect" class="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-400">
+                                    <option value="480p">480p</option>
                                     <option value="720p">720p</option>
                                     <option value="1080p">1080p</option>
                                 </select>
@@ -163,6 +164,21 @@
                                 <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                                 上传
                                 <input type="file" id="refImageInput" accept="image/*" multiple class="hidden">
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 参考视频上传 -->
+                    <div class="mb-3">
+                        <label class="block text-xs text-slate-500 mb-1">参考视频（可选，最多 3 个，支持 MP4/MOV/WebM）</label>
+                        <div class="flex items-center space-x-2">
+                            <div id="refVideoPreviews" class="flex items-center space-x-2 flex-1 min-w-0 overflow-x-auto">
+                                <!-- 动态渲染视频名称和上传状态 -->
+                            </div>
+                            <label class="flex-shrink-0 bg-slate-100 hover:bg-blue-50 border border-dashed border-slate-300 hover:border-blue-400 rounded-lg px-3 py-2 cursor-pointer transition-colors text-xs text-slate-500 hover:text-blue-600">
+                                <svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                                上传
+                                <input type="file" id="refVideoInput" accept="video/mp4,video/quicktime,video/webm" multiple class="hidden">
                             </label>
                         </div>
                     </div>

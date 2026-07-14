@@ -4,11 +4,13 @@ import time
 import asyncio
 import requests
 from datetime import datetime
-from fastapi import APIRouter, Request, HTTPException, Depends
+from typing import List
+from fastapi import APIRouter, Request, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, FileResponse
 from app.core.database import db
 from app.core.auth import get_current_user
 from app.core.volc_config import VOLC_VIDEO_API_KEY, VOLC_VIDEO_BASE_URL, VOLC_VIDEO_MODEL
+from app.core.tos_client import upload_file_bytes
 
 router = APIRouter()
 
@@ -53,6 +55,42 @@ def get_volc_video_url(task_id: str) -> dict | None:
         return None
 
 
+@router.post("/upload-reference-video")
+async def upload_reference_video(
+    video: UploadFile = File(...),
+    current_user: dict | None = Depends(get_current_user),
+):
+    """上传参考视频到 TOS，返回公网 URL"""
+    # 校验文件大小（最大 200MB）
+    MAX_SIZE = 200 * 1024 * 1024
+    content = await video.read()
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=400, detail=f"视频文件超过最大限制 200MB")
+
+    # 校验文件类型
+    allowed_types = ["video/mp4", "video/quicktime", "video/webm"]
+    if video.content_type and video.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的视频格式，仅支持 MP4、MOV、WebM",
+        )
+
+    filename = video.filename or "video.mp4"
+    
+    try:
+        public_url = upload_file_bytes(content, filename, folder="reference-videos")
+        print(f"📤 [参考视频上传] {filename} -> {public_url}")
+        return {
+            "url": public_url,
+            "filename": filename,
+            "content_type": video.content_type,
+            "size": len(content),
+        }
+    except Exception as e:
+        print(f"❌ [参考视频上传失败] {e}")
+        raise HTTPException(status_code=500, detail=f"上传视频到 TOS 失败: {str(e)}")
+
+
 @router.post("/generate")
 async def generate_video(
     request: Request,
@@ -75,7 +113,7 @@ async def generate_video(
                 "user_id": user_id,
                 "prompt": "测试视频生成（固定任务 ID）",
                 "duration": 5,
-                "resolution": "720p",
+                "resolution": "480p",
                 "seed": -1,
                 "status": "completed",
                 "created_at": datetime.utcnow(),
@@ -107,10 +145,11 @@ async def generate_video(
         body = await request.json()
         prompt = body.get("prompt", "").strip()
         duration = body.get("duration", 5)  # 默认 5 秒
-        resolution = body.get("resolution", "720p")
+        resolution = body.get("resolution", "480p")
         ratio = body.get("ratio", "16:9")  # 默认 16:9 横屏
         seed = body.get("seed", -1)
         reference_images = body.get("reference_images", None)  # 参考角色图片（base64 列表）
+        reference_video_urls = body.get("reference_video_urls", None)  # 参考视频（公网 URL 列表）
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
@@ -120,6 +159,10 @@ async def generate_video(
         raise HTTPException(status_code=400, detail="参考图片格式错误，必须为数组")
     if reference_images and len(reference_images) > 3:
         raise HTTPException(status_code=400, detail="参考图片最多 3 张")
+    if reference_video_urls and not isinstance(reference_video_urls, list):
+        raise HTTPException(status_code=400, detail="参考视频格式错误，必须为数组")
+    if reference_video_urls and len(reference_video_urls) > 3:
+        raise HTTPException(status_code=400, detail="参考视频最多 3 个")
 
     # 生成任务 ID（仅用于前端追踪）
     task_id = str(uuid.uuid4())
@@ -134,8 +177,9 @@ async def generate_video(
         "resolution": resolution,
         "ratio": ratio,
         "seed": seed,
-        "has_reference": bool(reference_images),
+        "has_reference": bool(reference_images) or bool(reference_video_urls),
         "reference_count": len(reference_images) if reference_images else 0,
+        "reference_video_count": len(reference_video_urls) if reference_video_urls else 0,
         "status": "pending",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
@@ -148,7 +192,7 @@ async def generate_video(
     await video_tasks_collection.insert_one(task_doc)
 
     # 异步调用火山引擎视频生成 API
-    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, duration, resolution, ratio, seed, reference_images))
+    asyncio.create_task(_call_volc_video_api(task_id, user_id, prompt, duration, resolution, ratio, seed, reference_images, reference_video_urls))
 
     return {"task_id": task_id, "status": "pending", "message": "视频生成任务已提交"}
 
@@ -162,6 +206,7 @@ async def _call_volc_video_api(
     ratio: str,
     seed: int,
     reference_images: list[str] | None = None,
+    reference_video_urls: list[str] | None = None,
 ):
     """异步调用火山引擎视频生成 API"""
     try:
@@ -184,7 +229,7 @@ async def _call_volc_video_api(
             "Content-Type": "application/json",
         }
 
-        # 构造 content 数组：参考图片在前，文本提示词在后
+        # 构造 content 数组：参考图片在前，参考视频其次，文本提示词在后
         content = []
         if reference_images:
             for img_url in reference_images:
@@ -192,6 +237,14 @@ async def _call_volc_video_api(
                     "type": "image_url",
                     "image_url": {"url": img_url},
                     "role": "reference_image",
+                })
+
+        if reference_video_urls:
+            for video_url in reference_video_urls:
+                content.append({
+                    "type": "video_url",
+                    "video_url": {"url": video_url},
+                    "role": "reference_video",
                 })
 
         # 使用官方 content 格式
@@ -303,10 +356,13 @@ async def _poll_video_status(task_id: str, volc_task_id: str, headers: dict):
                 if isinstance(content, dict):
                     video_url = content.get("video_url")
 
-                # 下载视频并保存
+                # 下载视频并保存到本地
                 video_path = None
+                tos_url = None
                 if video_url:
                     video_path = await _download_video(task_id, video_url)
+                    # 上传到 TOS 获取永久公网 URL
+                    tos_url = await _upload_to_tos(task_id, video_url)
 
                 # 更新数据库为 completed
                 await video_tasks_collection.update_one(
@@ -314,7 +370,7 @@ async def _poll_video_status(task_id: str, volc_task_id: str, headers: dict):
                     {
                         "$set": {
                             "status": "completed",
-                            "video_url": video_url,
+                            "video_url": tos_url or video_url,  # 优先存 TOS 永久 URL
                             "video_path": video_path,
                             "volc_status": "succeeded",
                             "updated_at": datetime.utcnow(),
@@ -389,6 +445,27 @@ async def _download_video(task_id: str, video_url: str) -> str | None:
 
     except Exception as e:
         print(f"⚠️ [视频下载失败] {task_id}: {e}")
+        return None
+
+
+async def _upload_to_tos(task_id: str, video_url: str) -> str | None:
+    """将生成的视频上传到 TOS，返回永久公网 URL"""
+    try:
+        # 先下载视频内容
+        response = requests.get(video_url, timeout=120)
+        response.raise_for_status()
+        video_data = response.content
+
+        # 上传到 TOS
+        key = f"generated-videos/{task_id}.mp4"
+        from app.core.tos_client import upload_bytes
+        tos_url = upload_bytes(video_data, key, "video/mp4")
+        
+        print(f"📤 [视频上传 TOS] {task_id} -> {tos_url}")
+        return tos_url
+
+    except Exception as e:
+        print(f"⚠️ [视频上传 TOS 失败] {task_id}: {e}")
         return None
 
 

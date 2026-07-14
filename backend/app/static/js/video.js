@@ -17,6 +17,11 @@ let refImages = [];
 const MAX_REF_IMAGES = 3;
 const MAX_REF_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
+// 参考视频存储 { filename, url, size } 数组
+let refVideos = [];
+const MAX_REF_VIDEOS = 3;
+const MAX_REF_VIDEO_SIZE = 200 * 1024 * 1024; // 200MB
+
 // 初始化用户信息
 (function initUserInfo() {
     const u = localStorage.getItem('username') || '用户';
@@ -235,6 +240,118 @@ function renderRefPreviews() {
     }
 }
 
+// ========== 参考视频处理 ==========
+async function handleRefVideoSelect(event) {
+    const files = event.target.files;
+    if (!files.length) return;
+
+    const remaining = MAX_REF_VIDEOS - refVideos.length;
+    if (remaining <= 0) {
+        alert(`最多只能上传 ${MAX_REF_VIDEOS} 个参考视频`);
+        event.target.value = '';
+        return;
+    }
+
+    const toProcess = Math.min(files.length, remaining);
+    const token = localStorage.getItem('token') || '';
+
+    for (let i = 0; i < toProcess; i++) {
+        const file = files[i];
+
+        if (file.size > MAX_REF_VIDEO_SIZE) {
+            alert(`视频 "${file.name}" 超过 200MB 限制`);
+            continue;
+        }
+
+        // 先显示上传中状态
+        const tempId = Date.now() + '_' + i;
+        refVideos.push({ filename: file.name, url: null, size: file.size, uploading: true, tempId });
+        renderRefVideoPreviews();
+
+        // 上传到后端 TOS
+        try {
+            const formData = new FormData();
+            formData.append('video', file);
+
+            const response = await fetch('/api/v1/video/upload-reference-video', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: formData,
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || '上传失败');
+            }
+
+            const result = await response.json();
+            
+            // 更新存储的 URL
+            const vid = refVideos.find(v => v.tempId === tempId);
+            if (vid) {
+                vid.url = result.url;
+                vid.uploading = false;
+                vid.size = result.size;
+            }
+        } catch (error) {
+            console.error('视频上传失败:', error);
+            // 移除上传失败的项
+            refVideos = refVideos.filter(v => v.tempId !== tempId);
+            alert(`视频 "${file.name}" 上传失败: ${error.message}`);
+        }
+
+        renderRefVideoPreviews();
+    }
+
+    event.target.value = '';
+}
+
+function removeRefVideo(index) {
+    refVideos.splice(index, 1);
+    renderRefVideoPreviews();
+}
+
+function renderRefVideoPreviews() {
+    const container = document.getElementById('refVideoPreviews');
+    if (!container) return;
+
+    const promptInput = document.getElementById('promptInput');
+
+    if (refVideos.length === 0) {
+        container.innerHTML = '<span class="text-xs text-slate-400">未选择参考视频</span>';
+        // 恢复默认 placeholder（如果没有图片参考的话）
+        if (refImages.length === 0 && promptInput) {
+            promptInput.placeholder = '描述您想要生成的视频内容（如：日系治愈插画少女站在初夏樱花街道）...';
+        }
+        return;
+    }
+
+    container.innerHTML = refVideos.map((vid, i) => {
+        const icon = vid.uploading ? '⏳' : '✅';
+        const bgClass = vid.uploading ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200';
+        const sizeMB = (vid.size / 1024 / 1024).toFixed(1);
+        return `
+            <div class="relative flex-shrink-0 group ${bgClass} border rounded-lg px-2 py-1 flex items-center space-x-1.5 text-xs">
+                <span>${icon}</span>
+                <span class="text-slate-600 max-w-[120px] truncate" title="${vid.filename}">${vid.filename}</span>
+                <span class="text-slate-400">(${sizeMB}MB)</span>
+                <button onclick="removeRefVideo(${i})" class="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer leading-none">x</button>
+            </div>
+        `;
+    }).join('');
+
+    // 有参考视频时更新提示词引导
+    if (promptInput) {
+        const hasVideos = refVideos.some(v => v.url !== null);
+        if (hasVideos) {
+            promptInput.placeholder = '已添加参考视频，请描述期望的编辑效果（如：将视频中的房子墙壁刷成蓝色）...';
+            if (!promptInput.value.trim()) {
+                promptInput.focus();
+            }
+        }
+    }
+}
+
 // 任务状态映射
 const statusMap = {
     'pending': { text: '排队中', icon: '⏳', color: 'text-slate-500', bg: 'bg-slate-50' },
@@ -264,6 +381,8 @@ async function handleGenerate() {
 
     // 收集参考图 base64
     const referenceImages = refImages.map(img => img.base64);
+    // 收集已上传成功的参考视频 TOS URL
+    const referenceVideoUrls = refVideos.filter(v => v.url).map(v => v.url);
 
     try {
         const response = await fetch('/api/v1/video/generate', {
@@ -279,6 +398,7 @@ async function handleGenerate() {
                 ratio: ratio,
                 seed: seed,
                 reference_images: referenceImages.length > 0 ? referenceImages : undefined,
+                reference_video_urls: referenceVideoUrls.length > 0 ? referenceVideoUrls : undefined,
             }),
         });
 
@@ -290,16 +410,18 @@ async function handleGenerate() {
         const taskId = data.task_id;
 
         // 创建任务卡片
-        createTaskCard(taskId, prompt, duration, resolution, refImages.length);
+        createTaskCard(taskId, prompt, duration, resolution, refImages.length, refVideos.length);
 
         // 开始轮询状态
         startPolling(taskId, prompt, duration, resolution);
 
         // 清空输入
         document.getElementById('promptInput').value = '';
-        // 清空参考图
+        // 清空参考图和参考视频
         refImages = [];
         renderRefPreviews();
+        refVideos = [];
+        renderRefVideoPreviews();
 
     } catch (error) {
         console.error('提交任务失败:', error);
@@ -311,12 +433,13 @@ async function handleGenerate() {
 }
 
 // 创建任务卡片
-function createTaskCard(taskId, prompt, duration, resolution, refCount = 0) {
+function createTaskCard(taskId, prompt, duration, resolution, refCount = 0, videoRefCount = 0) {
     const container = document.getElementById('resultsList');
     const card = document.createElement('div');
     card.id = `task-${taskId}`;
     card.className = 'bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden';
     const refBadge = refCount > 0 ? `<span class="text-xs bg-purple-100 text-purple-600 px-2 py-0.5 rounded-full">🖼 参考图 x${refCount}</span>` : '';
+    const videoBadge = videoRefCount > 0 ? `<span class="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full">🎬 参考视频 x${videoRefCount}</span>` : '';
     card.innerHTML = `
         <div class="p-5">
             <div class="flex items-start justify-between mb-3">
@@ -325,6 +448,7 @@ function createTaskCard(taskId, prompt, duration, resolution, refCount = 0) {
                         <span class="status-icon text-lg">⏳</span>
                         <span class="status-text text-sm font-medium text-slate-500">排队中</span>
                         ${refBadge}
+                        ${videoBadge}
                     </div>
                     <p class="text-sm text-slate-700 leading-relaxed">${prompt}</p>
                 </div>
@@ -617,6 +741,12 @@ document.addEventListener('DOMContentLoaded', () => {
         refInput.addEventListener('change', handleRefImageSelect);
     }
 
+    // 参考视频上传事件
+    const refVideoInput = document.getElementById('refVideoInput');
+    if (refVideoInput) {
+        refVideoInput.addEventListener('change', handleRefVideoSelect);
+    }
+
     // 回车键生成（已禁用，防止意外触发）
     // document.getElementById('promptInput').addEventListener('keydown', (e) => {
     //     if (e.key === 'Enter' && !e.shiftKey) {
@@ -627,49 +757,7 @@ document.addEventListener('DOMContentLoaded', () => {
     //     }
     // });
 
-    // 测试模式：自动创建测试任务（已关闭，需要手动点击生成）
-    // if (window.location.hostname === 'localhost') {
-    //     console.log(' 本地环境，5 秒后自动创建测试任务...');
-    //     setTimeout(() => {
-    //         console.log('🎬 开始创建测试任务...');
-    //         testCreateTask();
-    //     }, 5000);
-    // }
 });
 
 // 测试创建任务（仅用于演示）
-async function testCreateTask() {
-    const token = localStorage.getItem('token') || '';
-    try {
-        const response = await fetch('/api/v1/video/generate', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + token,
-            },
-            body: JSON.stringify({
-                prompt: '🎬 测试视频生成（固定火山引擎任务 ID）',
-                duration: 5,
-                resolution: '720p',
-                seed: -1,
-            }),
-        });
 
-        if (!response.ok) {
-            console.error('测试任务创建失败:', response.status);
-            return;
-        }
-
-        const data = await response.json();
-        console.log('✅ 测试任务创建成功:', data);
-        
-        // 创建任务卡片
-        createTaskCard(data.task_id, '🎬 测试视频生成（固定火山引擎任务 ID）', 5, '720p');
-        
-        // 开始轮询状态
-        startPolling(data.task_id, '🎬 测试视频生成（固定火山引擎任务 ID）', 5, '720p');
-        
-    } catch (error) {
-        console.error('测试任务创建失败:', error);
-    }
-}
