@@ -12,11 +12,6 @@ console.log('image.js 已加载');
 const debugLogs = [];
 let debugPanelVisible = false;
 
-// 参考图存储 { name, base64 } 数组
-let refImages = [];
-const MAX_REF_IMAGES = 16;
-const MAX_REF_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-
 // 翻译功能
 async function doTranslate() {
     const input = document.getElementById('promptInput');
@@ -185,88 +180,6 @@ function fillPrompt(text) {
     }
 }
 
-// ========== 参考图功能 ==========
-
-function handleRefFileSelect(event) {
-    const files = Array.from(event.target.files);
-    if (!files.length) return;
-
-    // 校验总数
-    if (refImages.length + files.length > MAX_REF_IMAGES) {
-        alert(`最多上传 ${MAX_REF_IMAGES} 张参考图片，当前已有 ${refImages.length} 张`);
-        event.target.value = '';
-        return;
-    }
-
-    let invalidCount = 0;
-    const promises = files.map(file => {
-        return new Promise((resolve) => {
-            // 校验大小
-            if (file.size > MAX_REF_FILE_SIZE) {
-                invalidCount++;
-                resolve(null);
-                return;
-            }
-            // 转为 base64
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const base64 = e.target.result; // data:image/png;base64,...
-                resolve({ name: file.name, base64: base64 });
-            };
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(file);
-        });
-    });
-
-    Promise.all(promises).then(results => {
-        const valid = results.filter(r => r !== null);
-        refImages.push(...valid);
-
-        if (invalidCount > 0) {
-            alert(`${invalidCount} 张图片超过 10MB 限制，已跳过`);
-        }
-
-        renderRefPreviews();
-        event.target.value = '';
-    });
-}
-
-function renderRefPreviews() {
-    const area = document.getElementById('refPreviewArea');
-    const countText = document.getElementById('refCountText');
-    const clearBtn = document.getElementById('clearRefBtn');
-
-    if (!area) return;
-
-    if (refImages.length === 0) {
-        area.innerHTML = '';
-        countText.textContent = '未选择';
-        clearBtn.classList.add('hidden');
-        return;
-    }
-
-    countText.textContent = `已选 ${refImages.length}/${MAX_REF_IMAGES} 张`;
-    clearBtn.classList.remove('hidden');
-
-    area.innerHTML = refImages.map((img, i) => `
-        <div class="ref-thumb relative group">
-            <img src="${img.base64}" alt="${img.name}" class="w-16 h-16 object-cover rounded-lg border border-slate-200">
-            <button onclick="removeRefImage(${i})" class="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer" title="移除">×</button>
-            <p class="text-[10px] text-slate-400 truncate w-16 text-center mt-0.5">${img.name}</p>
-        </div>
-    `).join('');
-}
-
-function removeRefImage(index) {
-    refImages.splice(index, 1);
-    renderRefPreviews();
-}
-
-function clearRefImages() {
-    refImages = [];
-    renderRefPreviews();
-}
-
 // 任务状态映射
 const statusMap = {
     'pending': { text: '排队中', icon: '⏳', color: 'text-slate-500', bg: 'bg-slate-50' },
@@ -292,8 +205,8 @@ const activeTasks = {};
 // 生成图片
 async function handleGenerate() {
     const prompt = document.getElementById('promptInput').value.trim();
-    if (!prompt && refImages.length === 0) {
-        alert('请输入提示词或添加参考图片');
+    if (!prompt) {
+        alert('请输入提示词');
         return;
     }
 
@@ -319,9 +232,6 @@ async function handleGenerate() {
         background: background,
         seed: seed,
     };
-    if (refImages.length > 0) {
-        reqBody.image_urls = refImages.map(img => img.base64);
-    }
 
     try {
         const response = await fetch('/api/v1/image/generate', {
@@ -342,13 +252,10 @@ async function handleGenerate() {
         const taskId = data.task_id;
 
         // 创建任务卡片
-        createTaskCard(taskId, prompt, size, quality, n, refImages.length > 0);
+        createTaskCard(taskId, prompt, size, quality, n);
 
         // 开始轮询状态
         startPolling(taskId, prompt, size, quality, n);
-
-        // 清空输入和参考图
-        clearRefImages();
 
         // 清空输入
         document.getElementById('promptInput').value = '';
@@ -363,12 +270,11 @@ async function handleGenerate() {
 }
 
 // 创建任务卡片
-function createTaskCard(taskId, prompt, size, quality, n, hasRef = false) {
+function createTaskCard(taskId, prompt, size, quality, n) {
     const container = document.getElementById('resultsList');
     const card = document.createElement('div');
     card.id = `task-${taskId}`;
     card.className = 'bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden';
-    const refBadge = hasRef ? '<span class="inline-flex items-center text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2 py-0.5 rounded-full ml-2">📷 参考图</span>' : '';
     card.innerHTML = `
         <div class="p-5">
             <div class="flex items-start justify-between mb-3">
@@ -376,7 +282,6 @@ function createTaskCard(taskId, prompt, size, quality, n, hasRef = false) {
                     <div class="flex items-center space-x-2 mb-2">
                         <span class="status-icon text-lg">⏳</span>
                         <span class="status-text text-sm font-medium text-slate-500">排队中</span>
-                        ${refBadge}
                     </div>
                     <p class="task-prompt text-sm text-slate-700 leading-relaxed">${prompt}</p>
                 </div>
@@ -705,7 +610,7 @@ async function scrollToTask(taskId) {
         const data = await response.json();
 
         // 创建卡片
-        createTaskCard(taskId, data.prompt || '(无提示词)', data.size || '1024x1024', data.quality || 'medium', data.n || 1, data.has_reference || false);
+        createTaskCard(taskId, data.prompt || '(无提示词)', data.size || '1024x1024', data.quality || 'medium', data.n || 1);
 
         // 等待 DOM 更新
         await new Promise(r => setTimeout(r, 50));

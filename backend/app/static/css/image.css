@@ -189,19 +189,3 @@
     background-color: #fef2f2;
 }
 
-/* 参考图上传区域 */
-.ref-thumb {
-    position: relative;
-    transition: transform 0.15s ease;
-}
-
-.ref-thumb:hover {
-    transform: scale(1.05);
-}
-
-#refUploadLabel.has-images {
-    border-style: solid;
-    border-color: #10b981;
-    color: #10b981;
-    background-color: #ecfdf5;
-}

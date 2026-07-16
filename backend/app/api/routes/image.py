@@ -92,7 +92,6 @@ def _call_openai_image_api(
     thinking: str | None,
     background: str | None,
     seed: int,
-    image_urls: list[str] | None = None,
 ) -> dict | None:
     """同步调用 OpenAI gpt-image-2 API"""
     client = OpenAI(
@@ -113,11 +112,8 @@ def _call_openai_image_api(
         params["background"] = background
     if seed >= 0:
         params["seed"] = seed
-    if image_urls:
-        params["image"] = image_urls
 
-    ref_count = len(image_urls) if image_urls else 0
-    print(f"  [调用 gpt-image-2] task_id={task_id}, size={size}, quality={quality}, n={n}, ref_images={ref_count}")
+    print(f"  [调用 gpt-image-2] task_id={task_id}, size={size}, quality={quality}, n={n}")
     response = client.images.generate(**params)
     return response
 
@@ -163,11 +159,10 @@ async def generate_image(
         thinking = body.get("thinking", "off")
         background = body.get("background", "auto")
         seed = body.get("seed", -1)
-        image_urls = body.get("image_urls", None)
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
-    if not prompt and not image_urls:
+    if not prompt:
         raise HTTPException(status_code=400, detail="提示词不能为空")
     if size not in SIZE_OPTIONS:
         raise HTTPException(status_code=400, detail=f"无效的分辨率，可选: {SIZE_OPTIONS}")
@@ -175,12 +170,9 @@ async def generate_image(
         raise HTTPException(status_code=400, detail=f"无效的画质，可选: {QUALITY_OPTIONS}")
     if not 1 <= n <= 10:
         raise HTTPException(status_code=400, detail="生成张数范围: 1-10")
-    if image_urls and len(image_urls) > 16:
-        raise HTTPException(status_code=400, detail="参考图片最多 16 张")
 
     task_id = str(uuid.uuid4())
     user_id = current_user["user_id"] if current_user else None
-    has_reference = bool(image_urls)
 
     # 翻译处理
     original_prompt = prompt
@@ -206,7 +198,6 @@ async def generate_image(
         "thinking": thinking,
         "background": background,
         "seed": seed,
-        "has_reference": has_reference,
         "status": "pending",
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
@@ -216,7 +207,7 @@ async def generate_image(
     await image_tasks_collection.insert_one(task_doc)
 
     # 异步调用 OpenAI
-    asyncio.create_task(_run_image_generation(task_id, user_id, prompt, size, quality, n, thinking, background, seed, image_urls))
+    asyncio.create_task(_run_image_generation(task_id, user_id, prompt, size, quality, n, thinking, background, seed))
 
     return {"task_id": task_id, "status": "pending", "message": "图片生成任务已提交"}
 
@@ -231,7 +222,6 @@ async def _run_image_generation(
     thinking: str | None,
     background: str | None,
     seed: int,
-    image_urls: list[str] | None = None,
 ):
     """在线程池中执行 OpenAI 调用，避免阻塞事件循环"""
     try:
@@ -248,7 +238,7 @@ async def _run_image_generation(
         response = await loop.run_in_executor(
             None,
             _call_openai_image_api,
-            task_id, prompt, size, quality, n, thinking, background, seed, image_urls,
+            task_id, prompt, size, quality, n, thinking, background, seed,
         )
 
         # 保存图片
@@ -456,7 +446,6 @@ async def get_task_status(
         "size": task.get("size"),
         "quality": task.get("quality"),
         "n": task.get("n"),
-        "has_reference": task.get("has_reference", False),
         "created_at": task.get("created_at").isoformat() if task.get("created_at") else None,
         "updated_at": task.get("updated_at").isoformat() if task.get("updated_at") else None,
     }
