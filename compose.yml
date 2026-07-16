@@ -19,6 +19,20 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
+  mongodb:
+    image: mongo:7
+    restart: always
+    volumes:
+      - app-mongodb-data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=${MONGODB_DB_NAME:-hr_assistant_db}
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+      start_period: 20s
+      timeout: 10s
+
   adminer:
     image: adminer
     restart: always
@@ -108,13 +122,9 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - SENTRY_DSN=${SENTRY_DSN}
+      - MONGODB_URI=mongodb://mongodb:27017
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -167,6 +177,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  app-mongodb-data:
 
 networks:
   traefik-public:
