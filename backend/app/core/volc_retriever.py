@@ -64,6 +64,12 @@ def retrieve_single(query: str, kb_id: str) -> str:
             timeout=(30, 360),
         )
         rsp.encoding = "utf-8"
+
+        # 检查 HTTP 状态码
+        if rsp.status_code != 200:
+            print(f"[Error] 知识库 API 返回 {rsp.status_code}: {rsp.text}")
+            return ""
+
         result = rsp.json()
 
         if "data" in result and "generated_answer" in result["data"]:
