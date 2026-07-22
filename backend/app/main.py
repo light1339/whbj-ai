@@ -1,3 +1,9 @@
+"""
+项目说明：
+- 登录/认证走 MongoDB（users_collection），不走 PostgreSQL
+- PostgreSQL 是模板遗留，当前业务未使用
+- 图片/视频/知识库任务全部存 MongoDB
+"""
 import sentry_sdk
 from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
