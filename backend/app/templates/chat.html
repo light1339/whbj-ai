@@ -148,6 +148,32 @@
         </div>
 
         <div class="w-80 border-l border-slate-200 bg-white p-4 flex flex-col space-y-4 custom-scrollbar overflow-y-auto hidden lg:flex flex-shrink-0">
+            <!-- 工具配置区 -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider">🔧 工具配置</h3>
+                    <button onclick="openToolModal()" class="text-xs text-blue-500 hover:text-blue-700 cursor-pointer flex items-center space-x-0.5">
+                        <span>+</span><span>添加</span>
+                    </button>
+                </div>
+                <select id="toolSelect" onchange="onToolChange()" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400 cursor-pointer">
+                    <option value="">未选择工具</option>
+                </select>
+                <div id="selectedToolInfo" class="hidden mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-blue-700 font-medium" id="selectedToolName">-</span>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="editSelectedTool()" class="text-xs text-blue-500 hover:text-blue-700 cursor-pointer">编辑</button>
+                            <button onclick="deleteSelectedTool()" class="text-xs text-red-500 hover:text-red-700 cursor-pointer">删除</button>
+                            <button onclick="clearToolSelection()" class="text-xs text-slate-500 hover:text-slate-700 cursor-pointer">取消</button>
+                        </div>
+                    </div>
+                    <div class="text-[10px] text-slate-500 mt-1 truncate" id="selectedToolPrompt">-</div>
+                </div>
+            </div>
+
+            <hr class="border-slate-100">
+
             <div>
                 <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">🔥 高频合规检索词</h3>
                 <div class="flex flex-wrap gap-2">
@@ -196,6 +222,31 @@
 
     <div id="clearFlashOverlay"></div>
 
-    <script src="/static/js/chat.js?v=20260626e"></script>
+    <!-- 工具编辑弹窗 -->
+    <div id="toolModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-xl w-96 p-5 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-slate-700" id="toolModalTitle">添加工具</h3>
+                <button onclick="closeToolModal()" class="text-slate-400 hover:text-slate-600 cursor-pointer">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <input type="hidden" id="toolEditId">
+            <div>
+                <label class="text-xs text-slate-500 mb-1 block">工具名称</label>
+                <input id="toolName" type="text" placeholder="如：法规解读助手" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400">
+            </div>
+            <div>
+                <label class="text-xs text-slate-500 mb-1 block">系统提示词</label>
+                <textarea id="toolPrompt" rows="5" placeholder="输入该工具的系统提示词..." class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400 resize-none"></textarea>
+            </div>
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeToolModal()" class="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100 cursor-pointer">取消</button>
+                <button onclick="saveTool()" class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg cursor-pointer">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/chat.js?v=20260723a"></script>
 </body>
 </html>

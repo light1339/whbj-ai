@@ -14,6 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.database import client
 from app.api.main import api_router
 from app.api.routes.pages import router as pages_router
+from app.api.routes.tools import init_default_tools
 from app.core.config import settings
 
 
@@ -38,6 +39,7 @@ async def startup_event():
     try:
         await client.admin.command("ping")
         print("====== ✅ 成功连接到 MongoDB Atlas 云数据库！ ======")
+        await init_default_tools()
     except Exception as e:
         print(f"====== ❌ MongoDB 连接失败！请检查服务是否开启。错误: {e} ======")
 

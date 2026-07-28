@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import items, login, private, users, utils, knowledge, admin, auth, feedback, video, image
+from app.api.routes import items, login, private, users, utils, knowledge, admin, auth, feedback, video, image, tools
 from app.core.config import settings
 
 api_router = APIRouter()
@@ -14,6 +14,7 @@ api_router.include_router(image.router, prefix="/image", tags=["image"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])
 api_router.include_router(auth.router)
 api_router.include_router(feedback.router, prefix="/feedback")
+api_router.include_router(tools.router, prefix="/tools", tags=["tools"])
 
 
 if settings.ENVIRONMENT == "local":

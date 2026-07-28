@@ -19,7 +19,7 @@ function clearContext() { if (chatContainer.classList.contains('chat-clearing'))
 function scrollToBottom() { chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' }); }
 function appendMessage(role, text) { const msgRow = document.createElement('div'); msgRow.className = role === 'user' ? "flex items-start space-x-3 max-w-[85%] ml-auto justify-end" : "flex items-start space-x-3 max-w-[85%]"; if (role === 'user') { msgRow.innerHTML = `<div class="bg-blue-600 text-white px-4 py-2.5 rounded-2xl rounded-tr-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div><div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white flex-shrink-0 text-xs font-bold">我</div>`; } else { msgRow.innerHTML = `<div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div><div class="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap">${text}</div>`; } chatContainer.appendChild(msgRow); scrollToBottom(); }
 
-async function handleSend() { const query = userInput.value.trim(); if (!query) return; lastUserQuery = query; appendMessage('user', query); userInput.value = ''; userInput.disabled = true; sendBtn.disabled = true; sendBtn.innerHTML = '<span>思考中...</span>'; conversationHistory.push({ role: "user", content: query }); const historyToSend = conversationHistory.slice(0, -1).slice(-(MAX_HISTORY_TURNS * 2)); const msgRow = document.createElement('div'); const msgId = 'msg-' + Date.now(); messageQueryMap[msgId] = query; msgRow.className = "flex items-start space-x-3 max-w-[85%]"; msgRow.innerHTML = `<div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div><div class="space-y-3 flex-1"><div id="text-${msgId}" class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap flex items-center space-x-2"><span class="text-blue-500 font-medium animate-pulse">🔍 正在深度检索行业法规与GB标准数据库，请稍候...</span></div><div id="toolbar-${msgId}" class="flex items-center space-x-2 pl-1 hidden"><button onclick="downloadContent('${msgId}')" title="下载此回复内容到本地" class="flex items-center space-x-1 text-xs text-slate-500 hover:text-blue-600 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all cursor-pointer"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>下载</span></button></div><div id="extend-box-${msgId}" class="flex flex-col space-y-2 pl-1 hidden"></div><div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md hidden" id="container-${msgId}"><div class="flex items-center space-x-1 text-xs text-slate-400"><span class="mr-1 text-[11px]">此次政策解答是否准确：</span><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 4)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 5)">★</button><span id="status-${msgId}" class="rating-status ml-2 text-[11px] text-slate-500"></span></div><div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2"><textarea id="textarea-${msgId}" placeholder="如果您发现条例引用或国标条款有误，请留下您的宝贵意见（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea><button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md shadow-sm cursor-pointer">提交反馈</button></div></div></div>`; chatContainer.appendChild(msgRow); scrollToBottom(); const textContainer = document.getElementById(`text-${msgId}`); let accumulatedText = ""; const loadingPhrases = ['<span class="text-blue-500 font-medium animate-pulse">🔍 正在检索国家、部委级危化品及运输法规库...</span>', '<span class="text-indigo-500 font-medium animate-pulse">🧠 正在对匹配的国标规范（GB）进行条款比对与提炼...</span>', '<span class="text-amber-500 font-medium animate-pulse">✍️ 正在将繁琐的安全技术条款转换为易读的合规指南...</span>']; let phraseIndex = 0; const visualTimer = setInterval(() => { if (accumulatedText === "") { phraseIndex = (phraseIndex + 1) % loadingPhrases.length; textContainer.innerHTML = loadingPhrases[phraseIndex]; } }, 5000); try { const response = await fetch('/api/v1/knowledge/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('token')||'') }, body: JSON.stringify({ query: query, history: historyToSend, deep_think: deepThinkOn, file_content: uploadedFileContent, file_name: uploadedFileName }) }); if (!response.ok) throw new Error(`HTTP 错误！状态码: ${response.status}`); const reader = response.body.getReader(); const decoder = new TextDecoder("utf-8"); while (true) { const { value, done } = await reader.read(); if (done) break; const chunk = decoder.decode(value, { stream: true }); const lines = chunk.split('\n'); for (const line of lines) { if (line.startsWith('data: ')) { const dataContent = line.slice(6).trim(); if (dataContent === '[DONE]') { if (accumulatedText) { conversationHistory.push({ role: "assistant", content: accumulatedText }); if (conversationHistory.length > MAX_HISTORY_TURNS * 2) { conversationHistory = conversationHistory.slice(-MAX_HISTORY_TURNS * 2); } updateContextUI(); } document.getElementById(`container-${msgId}`).classList.remove('hidden'); messageContentMap[msgId] = accumulatedText; document.getElementById('toolbar-'+msgId).classList.remove('hidden'); (async function loadExtends(){
+async function handleSend() { const query = userInput.value.trim(); if (!query) return; lastUserQuery = query; appendMessage('user', query); userInput.value = ''; userInput.disabled = true; sendBtn.disabled = true; sendBtn.innerHTML = '<span>思考中...</span>'; conversationHistory.push({ role: "user", content: query }); const historyToSend = conversationHistory.slice(0, -1).slice(-(MAX_HISTORY_TURNS * 2)); const msgRow = document.createElement('div'); const msgId = 'msg-' + Date.now(); messageQueryMap[msgId] = query; msgRow.className = "flex items-start space-x-3 max-w-[85%]"; msgRow.innerHTML = `<div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">🤖</div><div class="space-y-3 flex-1"><div id="text-${msgId}" class="bg-white border border-slate-200 text-slate-700 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm text-sm leading-relaxed whitespace-pre-wrap flex items-center space-x-2"><span class="text-blue-500 font-medium animate-pulse">🔍 正在深度检索行业法规与GB标准数据库，请稍候...</span></div><div id="toolbar-${msgId}" class="flex items-center space-x-2 pl-1 hidden"><button onclick="downloadContent('${msgId}')" title="下载此回复内容到本地" class="flex items-center space-x-1 text-xs text-slate-500 hover:text-blue-600 bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 px-3 py-1.5 rounded-lg transition-all cursor-pointer"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><span>下载</span></button></div><div id="extend-box-${msgId}" class="flex flex-col space-y-2 pl-1 hidden"></div><div class="bg-slate-100 border border-slate-200/60 p-3 rounded-xl max-w-md hidden" id="container-${msgId}"><div class="flex items-center space-x-1 text-xs text-slate-400"><span class="mr-1 text-[11px]">此次政策解答是否准确：</span><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 1)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 2)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 3)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 4)">★</button><button class="star-btn cursor-pointer text-slate-300 text-sm" onclick="handleStarClick('${msgId}', 5)">★</button><span id="status-${msgId}" class="rating-status ml-2 text-[11px] text-slate-500"></span></div><div id="comment-box-${msgId}" class="hidden mt-3 pt-3 border-t border-slate-200/60 flex flex-col space-y-2"><textarea id="textarea-${msgId}" placeholder="如果您发现条例引用或国标条款有误，请留下您的宝贵意见（选填）..." class="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white" rows="2"></textarea><button onclick="submitAllFeedback('${msgId}')" class="self-end bg-blue-600 hover:bg-blue-700 text-white text-[11px] px-3 py-1.5 rounded-md shadow-sm cursor-pointer">提交反馈</button></div></div></div>`; chatContainer.appendChild(msgRow); scrollToBottom(); const textContainer = document.getElementById(`text-${msgId}`); let accumulatedText = ""; const loadingPhrases = ['<span class="text-blue-500 font-medium animate-pulse">🔍 正在检索国家、部委级危化品及运输法规库...</span>', '<span class="text-indigo-500 font-medium animate-pulse">🧠 正在对匹配的国标规范（GB）进行条款比对与提炼...</span>', '<span class="text-amber-500 font-medium animate-pulse">✍️ 正在将繁琐的安全技术条款转换为易读的合规指南...</span>']; let phraseIndex = 0; const visualTimer = setInterval(() => { if (accumulatedText === "") { phraseIndex = (phraseIndex + 1) % loadingPhrases.length; textContainer.innerHTML = loadingPhrases[phraseIndex]; } }, 5000); try { const response = await fetch('/api/v1/knowledge/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('token')||'') }, body: JSON.stringify({ query: query, history: historyToSend, deep_think: deepThinkOn, file_content: uploadedFileContent, file_name: uploadedFileName, tool_id: selectedToolId }) }); if (!response.ok) throw new Error(`HTTP 错误！状态码: ${response.status}`); const reader = response.body.getReader(); const decoder = new TextDecoder("utf-8"); while (true) { const { value, done } = await reader.read(); if (done) break; const chunk = decoder.decode(value, { stream: true }); const lines = chunk.split('\n'); for (const line of lines) { if (line.startsWith('data: ')) { const dataContent = line.slice(6).trim(); if (dataContent === '[DONE]') { if (accumulatedText) { conversationHistory.push({ role: "assistant", content: accumulatedText }); if (conversationHistory.length > MAX_HISTORY_TURNS * 2) { conversationHistory = conversationHistory.slice(-MAX_HISTORY_TURNS * 2); } updateContextUI(); } document.getElementById(`container-${msgId}`).classList.remove('hidden'); messageContentMap[msgId] = accumulatedText; document.getElementById('toolbar-'+msgId).classList.remove('hidden'); (async function loadExtends(){
     try {
         const r = await fetch('/api/v1/knowledge/chat/extend', {method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+(localStorage.getItem('token')||'')},body:JSON.stringify({query:query,answer:accumulatedText})});
         const d = await r.json();
@@ -163,35 +163,159 @@ function removeFile(){
     });
 })();
 
-/* ========== MCP / Skills 面板 ========== */
-function openToolPanel(type){
-    var p = document.getElementById(type+'Panel');
-    if(p){ p.classList.remove('hidden'); p.classList.add('flex'); }
+/* ========== 工具管理 ========== */
+let selectedToolId = '';
+let toolsData = [];
+
+async function loadTools() {
+    try {
+        const r = await fetch('/api/v1/tools/', {
+            headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') }
+        });
+        const d = await r.json();
+        toolsData = d.tools || [];
+        renderToolSelect();
+    } catch (e) {
+        console.error('加载工具失败:', e);
+    }
 }
-function closeToolPanel(type){
-    var p = document.getElementById(type+'Panel');
-    if(p){ p.classList.add('hidden'); p.classList.remove('flex'); }
+
+function renderToolSelect() {
+    const select = document.getElementById('toolSelect');
+    if (!select) return;
+    
+    // 保留第一个"未选择工具"选项
+    select.innerHTML = '<option value="">未选择工具</option>';
+    
+    toolsData.forEach(function (t) {
+        const option = document.createElement('option');
+        option.value = t.id;
+        option.textContent = t.name;
+        if (t.id === selectedToolId) {
+            option.selected = true;
+        }
+        select.appendChild(option);
+    });
+    
+    updateToolInfo();
 }
-function openAddSkillModal(){
-    var m = document.getElementById('addSkillModal');
-    if(m){ m.classList.remove('hidden'); m.classList.add('flex'); }
+
+function updateToolInfo() {
+    const infoBox = document.getElementById('selectedToolInfo');
+    const nameEl = document.getElementById('selectedToolName');
+    const promptEl = document.getElementById('selectedToolPrompt');
+    
+    if (!selectedToolId) {
+        infoBox.classList.add('hidden');
+        return;
+    }
+    
+    const tool = toolsData.find(function (t) { return t.id === selectedToolId; });
+    if (tool) {
+        nameEl.textContent = tool.name;
+        promptEl.textContent = tool.prompt.length > 60 ? tool.prompt.substring(0, 60) + '...' : tool.prompt;
+        infoBox.classList.remove('hidden');
+    }
 }
-function closeAddSkillModal(){
-    var m = document.getElementById('addSkillModal');
-    if(m){ m.classList.add('hidden'); m.classList.remove('flex'); }
-    var sn = document.getElementById('skillName'); if(sn) sn.value = '';
-    var sd = document.getElementById('skillDesc'); if(sd) sd.value = '';
-    var sp = document.getElementById('skillPrompt'); if(sp) sp.value = '';
+
+function onToolChange() {
+    const select = document.getElementById('toolSelect');
+    selectedToolId = select.value;
+    updateToolInfo();
 }
-function saveSkill(){
-    var n = (document.getElementById('skillName')||{}).value||'';
-    var p = (document.getElementById('skillPrompt')||{}).value||'';
-    if(!n||!p){ alert('请填写技能名称和系统提示词'); return; }
-    alert('技能已保存（功能开发中）');
-    closeAddSkillModal();
+
+function clearToolSelection() {
+    selectedToolId = '';
+    const select = document.getElementById('toolSelect');
+    if (select) select.value = '';
+    updateToolInfo();
 }
-document.addEventListener('click', function(e){
-    if(e.target.id==='mcpPanel') closeToolPanel('mcp');
-    if(e.target.id==='skillsPanel') closeToolPanel('skills');
-    if(e.target.id==='addSkillModal') closeAddSkillModal();
+
+function editSelectedTool() {
+    if (!selectedToolId) return;
+    const tool = toolsData.find(function (t) { return t.id === selectedToolId; });
+    if (tool) {
+        document.getElementById('toolEditId').value = tool.id;
+        document.getElementById('toolName').value = tool.name;
+        document.getElementById('toolPrompt').value = tool.prompt;
+        document.getElementById('toolModalTitle').textContent = '编辑工具';
+        document.getElementById('toolModal').classList.remove('hidden');
+        document.getElementById('toolModal').classList.add('flex');
+    }
+}
+
+function deleteSelectedTool() {
+    if (!selectedToolId) return;
+    deleteTool(selectedToolId);
+}
+
+function openToolModal() {
+    document.getElementById('toolEditId').value = '';
+    document.getElementById('toolName').value = '';
+    document.getElementById('toolPrompt').value = '';
+    document.getElementById('toolModalTitle').textContent = '添加工具';
+    document.getElementById('toolModal').classList.remove('hidden');
+    document.getElementById('toolModal').classList.add('flex');
+}
+
+function editTool(id) {
+    const tool = toolsData.find(function (t) { return t.id === id; });
+    if (!tool) return;
+    document.getElementById('toolEditId').value = id;
+    document.getElementById('toolName').value = tool.name;
+    document.getElementById('toolPrompt').value = tool.prompt;
+    document.getElementById('toolModalTitle').textContent = '编辑工具';
+    document.getElementById('toolModal').classList.remove('hidden');
+    document.getElementById('toolModal').classList.add('flex');
+}
+
+function closeToolModal() {
+    document.getElementById('toolModal').classList.add('hidden');
+    document.getElementById('toolModal').classList.remove('flex');
+}
+
+async function saveTool() {
+    const id = document.getElementById('toolEditId').value;
+    const name = document.getElementById('toolName').value.trim();
+    const prompt = document.getElementById('toolPrompt').value.trim();
+    if (!name || !prompt) { alert('请填写工具名称和系统提示词'); return; }
+
+    const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') };
+    try {
+        if (id) {
+            await fetch('/api/v1/tools/' + id, { method: 'PUT', headers: headers, body: JSON.stringify({ name: name, prompt: prompt }) });
+        } else {
+            await fetch('/api/v1/tools/', { method: 'POST', headers: headers, body: JSON.stringify({ name: name, prompt: prompt }) });
+        }
+        closeToolModal();
+        await loadTools();
+    } catch (e) {
+        console.error('保存工具失败:', e);
+        alert('保存失败，请重试');
+    }
+}
+
+async function deleteTool(id) {
+    if (!confirm('确定删除该工具？')) return;
+    try {
+        await fetch('/api/v1/tools/' + id, {
+            method: 'DELETE',
+            headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') }
+        });
+        if (selectedToolId === id) {
+            selectedToolId = '';
+            const select = document.getElementById('toolSelect');
+            if (select) select.value = '';
+        }
+        await loadTools();
+    } catch (e) {
+        console.error('删除工具失败:', e);
+    }
+}
+
+document.addEventListener('click', function (e) {
+    if (e.target.id === 'toolModal') closeToolModal();
 });
+
+// 页面加载时获取工具列表
+loadTools();

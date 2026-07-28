@@ -6,9 +6,10 @@ from fastapi.responses import StreamingResponse
 from openai import OpenAI
 from app.core.volc_config import KB_POOL, VOLC_ARK_API_KEY, VOLC_ARK_BASE_URL, VOLC_ARK_MODEL, VOLC_KB_API_KEY
 from app.core.volc_retriever import retrieve_multi, check_broad_query
-from app.core.database import search_logs_collection
+from app.core.database import search_logs_collection, tools_collection
 from app.core.schemas import SearchLogModel
 from app.core.auth import get_current_user
+from bson import ObjectId
 
 router = APIRouter()
 
@@ -23,7 +24,7 @@ def _resolve_kb_ids(user: dict | None) -> list[str]:
     return kb_ids or [KB_POOL["default"]]
 
 
-def _stream_knowledge_response(query: str, deep_think: bool, kb_ids: list[str]):
+def _stream_knowledge_response(query: str, deep_think: bool, kb_ids: list[str], tool_prompt: str = ""):
     # 宽泛提问拦截已禁用
     # clarify_msg = check_broad_query(query)
     # if clarify_msg:
@@ -69,6 +70,8 @@ def _stream_knowledge_response(query: str, deep_think: bool, kb_ids: list[str]):
             "请用通俗易懂、条理清晰的方式回答用户的问题。\n"
             "回答要简洁实用，避免冗长啰嗦。如果不确定，可以坦诚说明。"
         )
+        if tool_prompt:
+            system_prompt += "\n\n---\n\n" + tool_prompt
         response = client.chat.completions.create(
             model=VOLC_ARK_MODEL,
             messages=[
@@ -100,11 +103,19 @@ async def chat_with_knowledge_base(
         deep_think = body.get("deep_think", False)
         file_content = body.get("file_content", "")
         file_name = body.get("file_name", "")
+        tool_id = body.get("tool_id", "")
     except Exception:
         raise HTTPException(status_code=400, detail="请求格式错误，必须为 JSON")
 
     if not user_query:
         raise HTTPException(status_code=400, detail="查询内容不能为空")
+
+    # 获取工具提示词
+    tool_prompt = ""
+    if tool_id and ObjectId.is_valid(tool_id):
+        tool_doc = await tools_collection.find_one({"_id": ObjectId(tool_id)})
+        if tool_doc:
+            tool_prompt = tool_doc.get("prompt", "")
 
     # 如果有上传文件内容，拼接到查询中
     if file_content:
@@ -119,7 +130,7 @@ async def chat_with_knowledge_base(
     async def event_generator():
         nonlocal full_response, search_status, error_detail
         try:
-            for text_chunk in _stream_knowledge_response(user_query, deep_think, kb_ids):
+            for text_chunk in _stream_knowledge_response(user_query, deep_think, kb_ids, tool_prompt):
                 full_response += text_chunk
                 yield f"data: {json.dumps({'text': text_chunk})}\n\n"
                 await asyncio.sleep(0.001)
